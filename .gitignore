@@ -1,0 +1,8 @@
+.DS_Store
+build/
+DerivedData/
+xcuserdata/
+*.xcresult
+
+# Local credentials, supplied per checkout (see Secrets.example.swift)
+EON_TV/Core/Secrets.swift

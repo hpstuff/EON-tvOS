@@ -1,0 +1,40 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # The app needs the EON client credentials at runtime, so CI writes the
+      # untracked Secrets.swift from repository secrets before building.
+      - name: Write Secrets.swift
+        env:
+          EON_ANDROIDTV_CLIENT_ID: ${{ secrets.EON_ANDROIDTV_CLIENT_ID }}
+          EON_ANDROIDTV_CLIENT_SECRET: ${{ secrets.EON_ANDROIDTV_CLIENT_SECRET }}
+          EON_WEB_CLIENT_ID: ${{ secrets.EON_WEB_CLIENT_ID }}
+          EON_WEB_CLIENT_SECRET: ${{ secrets.EON_WEB_CLIENT_SECRET }}
+        run: |
+          cat > EON_TV/Core/Secrets.swift <<EOF
+          enum Secrets {
+            static let androidTVClientID = "${EON_ANDROIDTV_CLIENT_ID}"
+            static let androidTVClientSecret = "${EON_ANDROIDTV_CLIENT_SECRET}"
+            static let webClientID = "${EON_WEB_CLIENT_ID}"
+            static let webClientSecret = "${EON_WEB_CLIENT_SECRET}"
+          }
+          EOF
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project EON_TV.xcodeproj \
+            -scheme EON_TV \
+            -destination 'generic/platform=tvOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty || exit ${PIPESTATUS[0]}
