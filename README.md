@@ -5,6 +5,18 @@ A native tvOS Internet TV application built on the EON platform SDK that lives i
 guide, catch-up and start-over playback, favourites and continue watching, all driven by the
 platform's live clock so the interface stays current without reloading screens.
 
+## Screenshots
+
+<p align="center"><img src="images/home-hero.jpg" width="800" alt="Home screen: hero card for the focused programme with Watch Live / Start Over / Guide actions, and a Continue Watching shelf below"></p>
+
+<p align="center"><img src="images/sign-in.png" width="800" alt="Sign-in screen with the EON mark, password/code toggle, and an Explore the demo option"></p>
+
+<p align="center"><img src="images/home-walkthrough.png" width="800" alt="Home shelves as focus moves across cards, and the sign-in screen"></p>
+
+<p align="center"><img src="images/guide-channels.png" width="800" alt="Full-day programme guide grid and the Channels tab grouped by category"></p>
+
+<p align="center"><img src="images/search-settings-details.png" width="800" alt="Search, Settings and programme details with the context menu"></p>
+
 ## Why this exists
 
 EON does not ship an Apple TV app. There is no official tvOS client, so on an Apple TV the
