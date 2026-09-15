@@ -10,6 +10,11 @@ final class RemoteWalkthroughTests: XCTestCase {
     continueAfterFailure = true
     app = XCUIApplication()
     app.launchArguments = ["-demo"]
+    // Run the walkthrough with the viewer's Text Size enlarged, e.g.
+    // TEST_RUNNER_EON_TEXT_SIZE=UICTContentSizeCategoryAccessibilityL xcodebuild test …
+    if let size = ProcessInfo.processInfo.environment["EON_TEXT_SIZE"] {
+      app.launchArguments += ["-UIPreferredContentSizeCategoryName", size]
+    }
     app.launch()
     wait(6)
   }
@@ -31,8 +36,7 @@ final class RemoteWalkthroughTests: XCTestCase {
   }
 
   func testGuideNavigation() {
-    press(.up); wait(1); snap("guide-00-tab-bar")
-    press(.right); wait(3); snap("guide-01-opened")
+    open(.guide, snappingSidebarAs: "guide-00-sidebar"); snap("guide-01-opened")
     press(.down); wait(1); snap("guide-02-first-move-down")
     press(.down); wait(1); snap("guide-03-second-move-down")
     press(.right); wait(1); snap("guide-04-right")
@@ -56,14 +60,14 @@ final class RemoteWalkthroughTests: XCTestCase {
   }
 
   func testChannelsSearchSettings() {
-    press(.up); press(.right, times: 2); wait(2); snap("channels-01-opened")
+    open(.channels); snap("channels-01-opened")
     press(.down); wait(1); snap("channels-02-filter-all")
     press(.right); wait(1); snap("channels-03-favorites")
     press(.right); wait(1); snap("channels-04-news")
     press(.down); wait(1); snap("channels-05-grid")
     press(.right, times: 2); wait(1); snap("channels-06-grid-right")
-    press(.up, times: 3); wait(1); press(.right); wait(2); snap("search-01-opened")
-    press(.right); wait(2); snap("settings-01-opened")
+    open(.search); snap("search-01-opened")
+    open(.settings); snap("settings-01-opened")
     press(.down); wait(1); snap("settings-02-first-row")
     press(.down, times: 3); wait(1); snap("settings-03-sign-out-row")
   }
@@ -73,19 +77,22 @@ final class RemoteWalkthroughTests: XCTestCase {
     // Long-press select opens the context menu on the focused card.
     remote.press(.select, forDuration: 1.2); wait(1); snap("details-01-context-menu")
     press(.menu); wait(1)
-    press(.up, times: 3); press(.right); press(.right); wait(1)
   }
 
   func testStartOverAndCatchUpFlow() {
     press(.right); press(.select); wait(8); snap("startover-01-playing")
     press(.playPause); wait(1); snap("startover-02-transport-bar")
-    press(.menu); wait(1); press(.menu); wait(1); press(.menu); wait(2); press(.menu); wait(2)
+    // Controls → hidden → out of the player; a further Menu would open the sidebar, and one
+    // more would leave the app.
+    press(.menu); wait(1); press(.menu); wait(1); press(.menu); wait(2)
     snap("startover-03-back-home")
+    // Leaving the player lands on the sidebar; select re-enters Home on the hero's first action.
+    press(.select); wait(1)
     // "Just Finished" shelf: third shelf down (On Now, Up Next, Just Finished) when nothing was resumed.
     press(.down, times: 4); wait(1); snap("catchup-01-shelf")
     press(.select); wait(8); snap("catchup-02-playing")
     press(.playPause); wait(1); snap("catchup-03-transport-bar")
-    press(.menu, times: 4); wait(2); snap("catchup-04-back-home")
+    press(.menu); wait(1); press(.menu); wait(1); press(.menu); wait(2); snap("catchup-04-back-home")
   }
 
   func testProgramDetails() {
@@ -97,7 +104,7 @@ final class RemoteWalkthroughTests: XCTestCase {
   }
 
   func testSearchScreen() {
-    press(.up); press(.right, times: 3); wait(2); snap("search-00-opened")
+    open(.search); snap("search-00-opened")
     press(.down); wait(1); snap("search-01-keyboard-focused")
   }
 
@@ -145,6 +152,22 @@ final class RemoteWalkthroughTests: XCTestCase {
   }
 
   // MARK: Helpers
+
+  /// Top-level sections in sidebar order (Search is pinned last by its role).
+  private enum Section: Int {
+    case home, guide, channels, settings, search
+  }
+
+  /// Opens the sidebar from wherever focus is (Menu returns to it; a second Menu would leave
+  /// the app), moves to the section and selects it, which switches the content and moves focus
+  /// into it.
+  private func open(_ section: Section, snappingSidebarAs name: String? = nil) {
+    press(.menu); wait(1)
+    if let name { snap(name) }
+    press(.up, times: 5)
+    press(.down, times: section.rawValue)
+    press(.select); wait(3)
+  }
 
   private func press(_ button: XCUIRemote.Button, times: Int = 1) {
     for _ in 0..<times {

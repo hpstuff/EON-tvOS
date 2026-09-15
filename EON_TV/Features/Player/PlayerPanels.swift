@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Bottom sheet shared by the player panels: a dimmed backdrop, a title row and content.
+/// Bottom sheet shared by the player panels: a dimmed backdrop, a title row and content. The
+/// content decides its own height, so cards that grow with the viewer's text size never clip.
 private struct PlayerSheet<Content: View>: View {
   let title: String
   let subtitle: String?
@@ -13,18 +14,19 @@ private struct PlayerSheet<Content: View>: View {
       VStack(alignment: .leading, spacing: 18) {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
           Text(title)
-            .font(.system(size: 34, weight: .regular))
+            .font(.headline.weight(.regular))
             .foregroundStyle(.white)
           if let subtitle {
             Text(subtitle)
-              .font(.system(size: 24, weight: .medium))
+              .font(.caption)
               .foregroundStyle(.white.opacity(0.6))
           }
           Spacer()
           Text("Press Back to close")
-            .font(.system(size: 21, weight: .medium))
+            .font(.caption2)
             .foregroundStyle(.white.opacity(0.45))
         }
+        .lineLimit(1)
         .padding(.horizontal, Theme.screenMargin)
         content()
       }
@@ -81,7 +83,7 @@ struct SchedulePanel: View {
     PlayerSheet(title: channel.name, subtitle: "Today", onClose: onClose) {
       if programmes.isEmpty {
         Text("The guide for this channel hasn't loaded yet.")
-          .font(.system(size: 24))
+          .font(.caption.weight(.regular))
           .foregroundStyle(Theme.textTertiary)
           .padding(.horizontal, Theme.screenMargin)
           .frame(height: 300)
@@ -108,7 +110,6 @@ struct SchedulePanel: View {
             .padding(.top, 20)
             .padding(.bottom, 30)
           }
-          .frame(height: 330)
           .scrollClipDisabled()
           .onAppear {
             if let current {
@@ -162,7 +163,6 @@ struct ChannelsPanel: View {
           .padding(.top, 20)
           .padding(.bottom, 30)
         }
-        .frame(height: 290)
         .scrollClipDisabled()
         .onAppear {
           proxy.scrollTo(controller.channel.id, anchor: .center)
@@ -189,7 +189,7 @@ struct MediaOptionsPanel: View {
           } label: {
             Label("This stream has no alternative audio or subtitle tracks", systemImage: "captions.bubble")
           }
-          .buttonStyle(.pill)
+          .buttonStyle(.glass)
           .focused(focus, equals: .panelItem("option-none"))
         }
         if !controller.subtitleOptions.isEmpty {
@@ -216,19 +216,16 @@ struct MediaOptionsPanel: View {
   private func optionColumn(title: String, options: [PlayerController.MediaOption]) -> some View {
     VStack(alignment: .leading, spacing: 12) {
       Text(title.uppercased())
-        .font(.system(size: 20, weight: .semibold))
+        .font(.caption2.weight(.semibold))
         .kerning(1)
         .foregroundStyle(.white.opacity(0.5))
       ForEach(options) { option in
         Button {
           controller.select(option, in: options)
         } label: {
-          HStack(spacing: 14) {
-            Image(systemName: option.isSelected ? "checkmark.circle.fill" : "circle")
-            Text(option.title)
-          }
+          Label(option.title, systemImage: option.isSelected ? "checkmark.circle.fill" : "circle")
         }
-        .buttonStyle(.pill)
+        .buttonStyle(.glass)
         .focused(focus, equals: .panelItem("option-\(option.id)"))
       }
     }

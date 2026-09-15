@@ -10,20 +10,36 @@ final class GuideScrollState {
   var viewportHeight: CGFloat = 0
 }
 
-enum GuideMetrics {
-  static let hourWidth: CGFloat = 640
-  static let columnWidth: CGFloat = 280
-  static let rowHeight: CGFloat = 96
-  static let rowSpacing: CGFloat = 10
-  static let rulerHeight: CGFloat = 44
-  static let cellGap: CGFloat = 6
-  static var rowPitch: CGFloat { rowHeight + rowSpacing }
-  static var gridTopInset: CGFloat { rulerHeight + 8 }
-  static var dayWidth: CGFloat { hourWidth * 24 }
-  static var pointsPerMs: CGFloat { hourWidth / 3_600_000 }
+/// Grid geometry. Everything scales with the viewer's text size (`scale` is the caption text
+/// style's factor, capped) so an hour of guide keeps about the same number of characters per
+/// cell whether text is default or accessibility sized.
+struct GuideMetrics: Equatable {
+  var scale: CGFloat = 1
 
-  static func x(forMs ms: Int, dayStartMs: Int) -> CGFloat {
+  var hourWidth: CGFloat { 640 * scale }
+  var columnWidth: CGFloat { 280 * scale }
+  var rowHeight: CGFloat { 96 * scale }
+  var rowSpacing: CGFloat { 10 }
+  var rulerHeight: CGFloat { 44 * scale }
+  var cellGap: CGFloat { 6 }
+  var rowPitch: CGFloat { rowHeight + rowSpacing }
+  var gridTopInset: CGFloat { rulerHeight + 8 }
+  var dayWidth: CGFloat { hourWidth * 24 }
+  var pointsPerMs: CGFloat { hourWidth / 3_600_000 }
+
+  func x(forMs ms: Int, dayStartMs: Int) -> CGFloat {
     CGFloat(ms - dayStartMs) * pointsPerMs
+  }
+}
+
+private struct GuideMetricsKey: EnvironmentKey {
+  static let defaultValue = GuideMetrics()
+}
+
+extension EnvironmentValues {
+  var guideMetrics: GuideMetrics {
+    get { self[GuideMetricsKey.self] }
+    set { self[GuideMetricsKey.self] = newValue }
   }
 }
 
@@ -38,6 +54,7 @@ struct GuideView: View {
   @Environment(LiveClock.self) private var clock
   @Environment(FavoritesStore.self) private var favorites
   @Environment(PlaybackCoordinator.self) private var coordinator
+  @ScaledMetric(relativeTo: .caption) private var textScale: CGFloat = 1
 
   @State private var day: Date = Date().startOfTheDay
   @State private var filter: ChannelsView.Filter = .all
@@ -71,6 +88,7 @@ struct GuideView: View {
 
   private var dayStartMs: Int { day.timestamp }
   private var isToday: Bool { day == clock.dayStart }
+  private var metrics: GuideMetrics { GuideMetrics(scale: min(textScale, 1.8)) }
 
   var body: some View {
     ZStack {
@@ -95,6 +113,7 @@ struct GuideView: View {
         ProgressView().tint(Theme.textSecondary)
       }
     }
+    .environment(\.guideMetrics, metrics)
     .onAppear(perform: handleAppear)
     .onChange(of: focus) { _, newValue in handleFocusChange(newValue) }
     .onChange(of: coordinator.guideTarget) { _, target in
@@ -113,10 +132,10 @@ struct GuideView: View {
           .font(.screenTitle)
           .foregroundStyle(Theme.textPrimary)
         Text(day.relativeDayLabel() + " · " + day.formatted(.dateTime.day().month(.wide)))
-          .font(.system(size: 24, weight: .medium))
+          .font(.caption)
           .foregroundStyle(Theme.textTertiary)
       }
-      .frame(width: 360, alignment: .leading)
+      .frame(width: 360 * metrics.scale, alignment: .leading)
 
       if let item = focusedItem {
         VStack(alignment: .leading, spacing: 8) {
@@ -129,24 +148,25 @@ struct GuideView: View {
               Tag(text: "UPCOMING")
             }
             Text(item.channel.name)
-              .font(.system(size: 24, weight: .semibold))
+              .font(.caption.weight(.semibold))
               .foregroundStyle(Theme.textSecondary)
             Text("\(item.schedule.timeRangeText) · \(item.schedule.durationMinutes) min")
-              .font(.system(size: 24, weight: .medium))
+              .font(.caption)
               .foregroundStyle(Theme.textTertiary)
             if let subtitle = item.schedule.subtitleText {
               Text(subtitle)
-                .font(.system(size: 24, weight: .medium))
+                .font(.caption)
                 .foregroundStyle(Theme.textTertiary)
                 .lineLimit(1)
             }
           }
+          .lineLimit(1)
           Text(item.schedule.title)
-            .font(.system(size: 36, weight: .regular))
+            .font(.headline.weight(.regular))
             .foregroundStyle(Theme.textPrimary)
             .lineLimit(1)
           Text(item.schedule.descriptionText ?? " ")
-            .font(.system(size: 23))
+            .font(.caption.weight(.regular))
             .foregroundStyle(Theme.textSecondary)
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -157,17 +177,17 @@ struct GuideView: View {
       } else {
         VStack(alignment: .leading, spacing: 10) {
           Text("Move through the grid to see what's on.")
-            .font(.system(size: 28, weight: .medium))
+            .font(.body)
             .foregroundStyle(Theme.textSecondary)
           Text("Select a programme to watch it live or from the start. Hold the touch surface for more options.")
-            .font(.system(size: 23))
+            .font(.caption.weight(.regular))
             .foregroundStyle(Theme.textTertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 10)
       }
     }
-    .frame(height: 150, alignment: .top)
+    .frame(minHeight: 150, alignment: .top)
     .animation(Theme.crossfade, value: focusedItem?.schedule.id)
   }
 
@@ -183,7 +203,7 @@ struct GuideView: View {
             } label: {
               FilterChipLabel(title: candidate.relativeDayLabel(), isSelected: candidate == day)
             }
-            .buttonStyle(.bare)
+            .buttonStyle(.glass)
             .focused($focus, equals: .day(candidate))
           }
         }
@@ -208,6 +228,7 @@ struct GuideView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
       }
+      // Categories take a fixed share so the day rail keeps room when chips grow with text size.
       .frame(width: 720)
       .focusSection()
     }
@@ -222,7 +243,7 @@ struct GuideView: View {
     } label: {
       FilterChipLabel(title: title, symbol: symbol, isSelected: filter == value)
     }
-    .buttonStyle(.bare)
+    .buttonStyle(.glass)
     .focused($focus, equals: .filter(value))
   }
 
@@ -234,11 +255,11 @@ struct GuideView: View {
       GuideChannelColumn(channels: channels, scroll: scroll, focus: $focus) { channel in
         coordinator.playLive(channel, lineup: channels)
       }
-      .frame(width: GuideMetrics.columnWidth)
+      .frame(width: metrics.columnWidth)
       .focusSection()
 
       ScrollView([.horizontal, .vertical]) {
-        LazyVStack(alignment: .leading, spacing: GuideMetrics.rowSpacing) {
+        LazyVStack(alignment: .leading, spacing: metrics.rowSpacing) {
           ForEach(channels) { channel in
             GuideRow(
               channel: channel,
@@ -247,11 +268,11 @@ struct GuideView: View {
               onSelectProgram: { schedule in select(schedule, on: channel, lineup: channels) },
               lineup: channels
             )
-            .frame(width: GuideMetrics.dayWidth, height: GuideMetrics.rowHeight, alignment: .leading)
+            .frame(width: metrics.dayWidth, height: metrics.rowHeight, alignment: .leading)
             .id(channel.id)
           }
         }
-        .padding(.top, GuideMetrics.gridTopInset)
+        .padding(.top, metrics.gridTopInset)
         .padding(.bottom, 60)
         .padding(.trailing, Theme.screenMargin)
       }
@@ -289,8 +310,8 @@ struct GuideView: View {
 
   // MARK: Behaviour
 
-  /// Where focus lands when the viewer first moves down from the tab bar: what's on now on the
-  /// first channel. Focus is never taken from the tab bar programmatically.
+  /// Where focus lands when the viewer enters the guide from the sidebar: what's on now on the
+  /// first channel. Focus is never taken from the sidebar programmatically.
   private var initialFocus: GuideFocus {
     guard let channel = visibleChannels.first else { return .day(day) }
     if isToday, let current = store.nowPlaying(channel) {
@@ -331,13 +352,13 @@ struct GuideView: View {
   /// is nudged just enough to bring that row fully into view; the column follows.
   private func revealRow(for channelID: Int) {
     guard let index = visibleChannels.firstIndex(where: { $0.id == channelID }), scroll.viewportHeight > 0 else { return }
-    let rowTop = GuideMetrics.gridTopInset + CGFloat(index) * GuideMetrics.rowPitch
-    let rowBottom = rowTop + GuideMetrics.rowHeight
-    let visibleTop = scroll.offsetY + GuideMetrics.gridTopInset
+    let rowTop = metrics.gridTopInset + CGFloat(index) * metrics.rowPitch
+    let rowBottom = rowTop + metrics.rowHeight
+    let visibleTop = scroll.offsetY + metrics.gridTopInset
     let visibleBottom = scroll.offsetY + scroll.viewportHeight
     var targetY: CGFloat?
     if rowTop < visibleTop {
-      targetY = rowTop - GuideMetrics.gridTopInset
+      targetY = rowTop - metrics.gridTopInset
     } else if rowBottom > visibleBottom {
       targetY = rowBottom - scroll.viewportHeight + 24
     }
@@ -356,13 +377,13 @@ struct GuideView: View {
       scrollToNow(animated: true)
     } else {
       // Other days open at prime time; mornings stay reachable by scrolling.
-      position.scrollTo(x: GuideMetrics.hourWidth * 19, y: scroll.offsetY)
+      position.scrollTo(x: metrics.hourWidth * 19, y: scroll.offsetY)
     }
   }
 
   private func scrollToNow(animated: Bool) {
-    let nowX = GuideMetrics.x(forMs: clock.nowMs, dayStartMs: dayStartMs)
-    let target = max(0, nowX - GuideMetrics.hourWidth * 0.5)
+    let nowX = metrics.x(forMs: clock.nowMs, dayStartMs: dayStartMs)
+    let target = max(0, nowX - metrics.hourWidth * 0.5)
     if animated {
       withAnimation(Theme.crossfade) { position.scrollTo(x: target, y: scroll.offsetY) }
     } else {
@@ -403,15 +424,16 @@ private struct GuideChannelColumn: View {
   let onSelect: (Channel) -> Void
 
   @Environment(ContentStore.self) private var store
+  @Environment(\.guideMetrics) private var metrics
 
   var body: some View {
     GeometryReader { proxy in
-      let pitch = GuideMetrics.rowPitch
-      let first = max(0, Int((scroll.offsetY - GuideMetrics.gridTopInset) / pitch) - 1)
+      let pitch = metrics.rowPitch
+      let first = max(0, Int((scroll.offsetY - metrics.gridTopInset) / pitch) - 1)
       let count = Int(proxy.size.height / pitch) + 3
       let last = min(channels.count, first + count)
 
-      VStack(spacing: GuideMetrics.rowSpacing) {
+      VStack(spacing: metrics.rowSpacing) {
         if first < last {
           ForEach(channels[first..<last]) { channel in
             Button {
@@ -420,13 +442,13 @@ private struct GuideChannelColumn: View {
               GuideChannelCellLabel(channel: channel, number: store.channelNumber(channel))
             }
             .buttonStyle(.bare)
-            .frame(height: GuideMetrics.rowHeight)
+            .frame(height: metrics.rowHeight)
             .focused(focus, equals: .channel(channel.id))
           }
         }
       }
-      .frame(width: GuideMetrics.columnWidth - 12, alignment: .leading)
-      .offset(y: GuideMetrics.gridTopInset + CGFloat(first) * pitch - scroll.offsetY)
+      .frame(width: metrics.columnWidth - 12, alignment: .leading)
+      .offset(y: metrics.gridTopInset + CGFloat(first) * pitch - scroll.offsetY)
     }
     .clipped()
   }
@@ -436,23 +458,24 @@ private struct GuideChannelCellLabel: View {
   let channel: Channel
   let number: Int
   @Environment(\.isFocused) private var isFocused
+  @Environment(\.guideMetrics) private var metrics
 
   var body: some View {
     HStack(spacing: 14) {
       Text(String(number))
         .font(.channelNumber)
         .foregroundStyle(isFocused ? Theme.textOnFocus.opacity(0.7) : Theme.textTertiary)
-        .frame(width: 44, alignment: .trailing)
-      ChannelLogo(channel: channel, height: 46, platter: false)
-        .frame(width: 96)
+        .frame(width: 44 * metrics.scale, alignment: .trailing)
+      ChannelLogo(channel: channel, height: metrics.rowHeight * 0.48, platter: false)
+        .frame(width: 96 * metrics.scale)
       Text(channel.shortName)
-        .font(.system(size: 21, weight: .semibold))
+        .font(.caption2.weight(.semibold))
         .foregroundStyle(isFocused ? Theme.textOnFocus : Theme.textSecondary)
         .lineLimit(1)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
     .padding(.horizontal, 12)
-    .frame(width: GuideMetrics.columnWidth - 12, height: GuideMetrics.rowHeight)
+    .frame(width: metrics.columnWidth - 12, height: metrics.rowHeight)
     .background {
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .fill(isFocused ? Color.white : Theme.backgroundElevated.opacity(0.9))
@@ -478,6 +501,7 @@ private struct GuideRow: View {
 
   @Environment(ContentStore.self) private var store
   @Environment(LiveClock.self) private var clock
+  @Environment(\.guideMetrics) private var metrics
 
   private var dayStartMs: Int { day.timestamp }
   private var dayEndMs: Int { dayStartMs + 86_400_000 }
@@ -494,7 +518,7 @@ private struct GuideRow: View {
         skeleton
       }
     }
-    .frame(width: GuideMetrics.dayWidth, alignment: .leading)
+    .frame(width: metrics.dayWidth, alignment: .leading)
     .task(id: day) {
       if case .idle = state {
         await store.ensureEPG(day: day, for: [channel])
@@ -511,18 +535,18 @@ private struct GuideRow: View {
         .font(.guideCell)
         .foregroundStyle(Theme.textTertiary)
         .padding(.horizontal, 24)
-        .frame(width: GuideMetrics.hourWidth * 3, height: GuideMetrics.rowHeight, alignment: .leading)
+        .frame(width: metrics.hourWidth * 3, height: metrics.rowHeight, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface.opacity(0.5)))
     } else {
-      HStack(spacing: GuideMetrics.cellGap) {
+      HStack(spacing: metrics.cellGap) {
         let firstStart = max(clipped[0].startTime, dayStartMs)
         if firstStart > dayStartMs {
-          Color.clear.frame(width: GuideMetrics.x(forMs: firstStart, dayStartMs: dayStartMs) - GuideMetrics.cellGap)
+          Color.clear.frame(width: metrics.x(forMs: firstStart, dayStartMs: dayStartMs) - metrics.cellGap)
         }
         ForEach(Array(clipped.enumerated()), id: \.element.id) { index, schedule in
           let start = max(schedule.startTime, dayStartMs)
           let end = min(schedule.endTime, dayEndMs)
-          let width = max(24, CGFloat(end - start) * GuideMetrics.pointsPerMs - GuideMetrics.cellGap)
+          let width = max(24, CGFloat(end - start) * metrics.pointsPerMs - metrics.cellGap)
           Button {
             onSelectProgram(schedule)
           } label: {
@@ -535,9 +559,9 @@ private struct GuideRow: View {
             ProgramContextMenu(item: .init(channel: channel, schedule: schedule), lineup: lineup)
           }
           if index < clipped.count - 1 {
-            let gap = CGFloat(clipped[index + 1].startTime - schedule.endTime) * GuideMetrics.pointsPerMs
-            if gap > GuideMetrics.cellGap * 2 {
-              Color.clear.frame(width: gap - GuideMetrics.cellGap)
+            let gap = CGFloat(clipped[index + 1].startTime - schedule.endTime) * metrics.pointsPerMs
+            if gap > metrics.cellGap * 2 {
+              Color.clear.frame(width: gap - metrics.cellGap)
             }
           }
         }
@@ -546,10 +570,10 @@ private struct GuideRow: View {
   }
 
   private var skeleton: some View {
-    HStack(spacing: GuideMetrics.cellGap) {
+    HStack(spacing: metrics.cellGap) {
       ForEach(0..<12, id: \.self) { index in
         SkeletonBlock(cornerRadius: 14)
-          .frame(width: [420, 300, 640, 360, 520][(index + channel.id) % 5] - GuideMetrics.cellGap, height: GuideMetrics.rowHeight)
+          .frame(width: [420, 300, 640, 360, 520][(index + channel.id) % 5] * metrics.scale - metrics.cellGap, height: metrics.rowHeight)
       }
     }
   }
@@ -559,12 +583,11 @@ private struct GuideRow: View {
       Task { await store.retryFailedEPG(day: day) }
     } label: {
       Label("Couldn't load this channel's guide — try again", systemImage: "arrow.clockwise")
-        .font(.guideCell)
     }
-    .buttonStyle(.pill)
+    .buttonStyle(.glass)
     .focused(focus, equals: .retry(channel.id))
     .padding(.leading, 12)
-    .frame(height: GuideMetrics.rowHeight)
+    .frame(height: metrics.rowHeight)
   }
 }
 
@@ -575,6 +598,7 @@ private struct GuideCell: View {
   let width: CGFloat
   let nowMs: Int
   @Environment(\.guideCellFocused) private var isFocused
+  @Environment(\.guideMetrics) private var metrics
 
   private var isAiring: Bool { schedule.isAiring(at: nowMs) }
   private var hasEnded: Bool { schedule.hasEnded(at: nowMs) }
@@ -591,14 +615,14 @@ private struct GuideCell: View {
             .frame(width: proxy.size.width * schedule.progress(at: nowMs))
         }
       }
-      if width >= 90 {
+      if width >= 90 * metrics.scale {
         VStack(alignment: .leading, spacing: 4) {
           HStack(spacing: 10) {
             if isAiring {
-              Circle().fill(Theme.live).frame(width: 10, height: 10)
-            } else if catchUpAvailable, width >= 200 {
+              Circle().fill(Theme.live).frame(width: 10 * metrics.scale, height: 10 * metrics.scale)
+            } else if catchUpAvailable, width >= 200 * metrics.scale {
               Image(systemName: "gobackward")
-                .font(.system(size: 17, weight: .bold))
+                .font(.caption2.weight(.bold))
                 .foregroundStyle(isFocused ? Theme.textOnFocus.opacity(0.7) : Theme.textSecondary)
             }
             Text(schedule.title)
@@ -606,9 +630,9 @@ private struct GuideCell: View {
               .foregroundStyle(isFocused ? Theme.textOnFocus : (hasEnded && !catchUpAvailable ? Theme.textTertiary : Theme.textPrimary))
               .lineLimit(1)
           }
-          if width >= 220 {
+          if width >= 220 * metrics.scale {
             Text(schedule.timeRangeText)
-              .font(.system(size: 20, weight: .medium))
+              .font(.caption2)
               .foregroundStyle(isFocused ? Theme.textOnFocus.opacity(0.65) : Theme.textTertiary)
               .lineLimit(1)
           }
@@ -616,7 +640,7 @@ private struct GuideCell: View {
         .padding(.horizontal, 20)
       }
     }
-    .frame(width: width, height: GuideMetrics.rowHeight)
+    .frame(width: width, height: metrics.rowHeight)
     .overlay {
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .strokeBorder(isAiring && !isFocused ? Color.white.opacity(0.38) : Color.white.opacity(0.06), lineWidth: isAiring && !isFocused ? 1.5 : 1)
@@ -636,6 +660,7 @@ private struct GuideCell: View {
 private struct GuideRuler: View {
   let day: Date
   let scroll: GuideScrollState
+  @Environment(\.guideMetrics) private var metrics
 
   var body: some View {
     GeometryReader { proxy in
@@ -648,18 +673,18 @@ private struct GuideRuler: View {
               .font(.guideRuler)
               .foregroundStyle(Theme.textSecondary)
           }
-          .frame(width: GuideMetrics.hourWidth / 2, alignment: .leading)
+          .frame(width: metrics.hourWidth / 2, alignment: .leading)
         }
       }
       .offset(x: -scroll.offsetX)
       .frame(width: proxy.size.width, alignment: .leading)
       .clipped()
     }
-    .frame(height: GuideMetrics.rulerHeight)
+    .frame(height: metrics.rulerHeight)
     .background(alignment: .top) {
       VStack(spacing: 0) {
         Theme.background.opacity(0.97)
-          .frame(height: GuideMetrics.rulerHeight + 4)
+          .frame(height: metrics.rulerHeight + 4)
         LinearGradient(colors: [Theme.background.opacity(0.97), .clear], startPoint: .top, endPoint: .bottom)
           .frame(height: 14)
       }
@@ -672,14 +697,15 @@ private struct GuideNowLine: View {
   let day: Date
   let scroll: GuideScrollState
   let nowMs: Int
+  @Environment(\.guideMetrics) private var metrics
 
   var body: some View {
     GeometryReader { proxy in
-      let x = GuideMetrics.x(forMs: nowMs, dayStartMs: day.timestamp) - scroll.offsetX
+      let x = metrics.x(forMs: nowMs, dayStartMs: day.timestamp) - scroll.offsetX
       if x >= -1, x <= proxy.size.width + 1 {
         VStack(spacing: 0) {
           Text(nowMs.dateFromMs.shortTime)
-            .font(.system(size: 18, weight: .semibold))
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(Theme.textOnFocus)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)
@@ -688,8 +714,8 @@ private struct GuideNowLine: View {
             .fill(Theme.spectrumVertical)
             .frame(width: 3)
         }
-        .frame(width: 80)
-        .position(x: x, y: proxy.size.height / 2 + GuideMetrics.rulerHeight / 2)
+        .frame(width: 100 * metrics.scale)
+        .position(x: x, y: proxy.size.height / 2 + metrics.rulerHeight / 2)
         .frame(height: proxy.size.height)
       }
     }

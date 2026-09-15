@@ -52,6 +52,7 @@ struct RootView: View {
 struct LaunchView: View {
   @State private var lineProgress: CGFloat = 0
   @State private var breathing = false
+  @Environment(\.prefersCalmInterface) private var calm
 
   var body: some View {
     ZStack {
@@ -62,6 +63,7 @@ struct LaunchView: View {
     }
     .onAppear {
       withAnimation(.easeOut(duration: 1.2)) { lineProgress = 1 }
+      guard !calm else { return }
       withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true).delay(1.2)) { breathing = true }
     }
   }
