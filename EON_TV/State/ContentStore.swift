@@ -248,13 +248,14 @@ final class ContentStore {
     return nil
   }
 
-  /// Guide days offered to the viewer: as far back as catch-up reaches, one week ahead.
+  /// Guide days offered to the viewer: as far back as catch-up reaches, ending today. Future
+  /// days are left out — nothing there can be played, only read.
   var guideDays: [Date] {
     let calendar = Calendar.current
     let today = clock.dayStart
     let maxWindow = channels.map(\.catchUpWindow).max() ?? 0
     let backDays = min(7, Int(maxWindow / 86_400))
-    return (-backDays...7).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+    return (-backDays...0).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
   }
 
   // MARK: Now / next

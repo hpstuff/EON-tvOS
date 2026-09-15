@@ -61,7 +61,7 @@ struct GuideView: View {
   @State private var scroll = GuideScrollState()
   @State private var position = ScrollPosition()
   @State private var focusedItem: ContentStore.ProgramItem?
-  @State private var didScrollToNow = false
+  @State private var scrolledDay: Date?
   @FocusState private var focus: GuideFocus?
 
   enum GuideFocus: Hashable {
@@ -115,6 +115,9 @@ struct GuideView: View {
     }
     .environment(\.guideMetrics, metrics)
     .onAppear(perform: handleAppear)
+    .onChange(of: coordinator.selectedSection, initial: true) { _, section in
+      if section == .guide { showToday() }
+    }
     .onChange(of: focus) { _, newValue in handleFocusChange(newValue) }
     .onChange(of: coordinator.guideTarget) { _, target in
       if let target { reveal(target) }
@@ -207,9 +210,13 @@ struct GuideView: View {
             .focused($focus, equals: .day(candidate))
           }
         }
+        .scrollTargetLayout()
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
       }
+      // Today is the last chip now that the guide stops there, so the strip has to open at its
+      // end rather than at the oldest catch-up day.
+      .scrollPosition(id: $scrolledDay, anchor: .trailing)
       .frame(maxWidth: .infinity)
       .focusSection()
 
@@ -321,14 +328,21 @@ struct GuideView: View {
   }
 
   private func handleAppear() {
-    if day < (store.guideDays.first ?? day) || day > (store.guideDays.last ?? day) {
-      day = clock.dayStart
-    }
-    if isToday && !didScrollToNow {
-      didScrollToNow = true
-      scrollToNow(animated: false)
-    }
+    scrolledDay = day
     if let target = coordinator.guideTarget { reveal(target) }
+  }
+
+  /// The guide always opens on today, at what's on now: a day picked earlier in the session
+  /// shouldn't still be showing the next time the viewer enters the tab. Skipped when a channel
+  /// is being revealed from elsewhere, since that already places the grid itself.
+  private func showToday() {
+    guard coordinator.guideTarget == nil else { return }
+    if day != clock.dayStart {
+      day = clock.dayStart
+      focusedItem = nil
+    }
+    scrolledDay = day
+    scrollToNow(animated: false)
   }
 
   private func handleFocusChange(_ newValue: GuideFocus?) {

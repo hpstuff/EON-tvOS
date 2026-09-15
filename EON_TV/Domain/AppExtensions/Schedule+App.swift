@@ -28,6 +28,14 @@ extension Schedule {
 
   var timeRangeText: String { "\(startDate.shortTime) – \(endDate.shortTime)" }
 
+  /// Time range with the day in front when the programme isn't on today — "Yesterday · 20:00 – 21:30".
+  /// Continue Watching and catch-up reach back days or weeks, where an hour on its own says nothing
+  /// about which showing it was.
+  var dayAndTimeRangeText: String {
+    guard let day = startDate.dayLabelUnlessToday() else { return timeRangeText }
+    return "\(day) · \(timeRangeText)"
+  }
+
   var descriptionText: String? {
     shortDescription?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
   }
@@ -55,6 +63,20 @@ extension Date {
   }
 
   var shortDayLabel: String { formatted(.dateTime.weekday(.abbreviated).day()) }
+
+  /// The day this falls on, or `nil` for today where the time alone is unambiguous. Weekday names
+  /// only inside the surrounding week; beyond that a date, since catch-up windows run up to a
+  /// month and "Tuesday" would then name two different days.
+  func dayLabelUnlessToday(calendar: Calendar = .current, now: Date = Date()) -> String? {
+    if calendar.isDateInToday(self) { return nil }
+    if calendar.isDateInYesterday(self) { return "Yesterday" }
+    if calendar.isDateInTomorrow(self) { return "Tomorrow" }
+    let days = calendar.dateComponents(
+      [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: self)
+    ).day ?? 0
+    if abs(days) < 7 { return formatted(.dateTime.weekday(.wide)) }
+    return formatted(.dateTime.day().month(.abbreviated))
+  }
 }
 
 extension String {
