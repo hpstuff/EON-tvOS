@@ -40,6 +40,7 @@ struct PlayerScreenContent: View {
   @Environment(FavoritesStore.self) private var favorites
   @Environment(LiveClock.self) private var clock
   @Environment(PlaybackCoordinator.self) private var coordinator
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   @State private var controller: PlayerController?
   @State private var controlsVisible = false
@@ -189,11 +190,11 @@ struct PlayerScreenContent: View {
       HStack(alignment: .top) {
         Spacer()
         Text(clock.now.shortTime)
-          .font(.system(size: 26, weight: .semibold))
+          .font(.caption.weight(.semibold))
           .foregroundStyle(.white.opacity(0.85))
           .padding(.horizontal, 18)
           .padding(.vertical, 8)
-          .background(Capsule().fill(Color.black.opacity(0.45)))
+          .glassEffect(in: Capsule())
       }
       .padding(.top, 50)
       .padding(.horizontal, Theme.screenMargin)
@@ -204,28 +205,28 @@ struct PlayerScreenContent: View {
         HStack(spacing: 14) {
           ChannelLogo(channel: controller.channel, height: 40, platter: false)
           Text(controller.channel.name)
-            .font(.system(size: 26, weight: .semibold))
+            .font(.caption.weight(.semibold))
             .foregroundStyle(.white.opacity(0.9))
           Text("· Channel \(store.channelNumber(controller.channel))")
-            .font(.system(size: 26, weight: .medium))
+            .font(.caption)
             .foregroundStyle(.white.opacity(0.55))
           Spacer()
           statusBadge(controller, displayedMs: displayedMs, now: now)
         }
 
         Text(programme?.title ?? controller.channel.name)
-          .font(.system(size: 44, weight: .regular))
+          .font(.title3.weight(.regular))
           .foregroundStyle(.white)
           .lineLimit(1)
 
         if let programme {
           HStack(spacing: 14) {
             Text(programme.timeRangeText)
-              .font(.system(size: 24, weight: .medium))
+              .font(.caption)
               .foregroundStyle(.white.opacity(0.7))
             if let subtitle = programme.subtitleText {
               Text(subtitle)
-                .font(.system(size: 24, weight: .medium))
+                .font(.caption)
                 .foregroundStyle(.white.opacity(0.5))
                 .lineLimit(1)
             }
@@ -333,6 +334,9 @@ struct PlayerScreenContent: View {
       }
       Spacer()
     }
+    // Six titled buttons no longer fit in a row at accessibility text sizes; the symbols carry
+    // the meaning then, and VoiceOver still reads the titles.
+    .labelStyle(PlayerControlLabelStyle(iconOnly: dynamicTypeSize.isAccessibilitySize))
   }
 
   /// One view identity for both timeshift states so focus survives switching between them.
@@ -350,8 +354,11 @@ struct PlayerScreenContent: View {
       scheduleAutoHide()
     } label: {
       Label(title, systemImage: symbol)
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
     }
-    .buttonStyle(.pill)
+    .buttonStyle(.glass)
+    .accessibilityLabel(title)
     .focused($focus, equals: .button(id))
   }
 
@@ -366,11 +373,11 @@ struct PlayerScreenContent: View {
           ChannelLogo(channel: controller.channel, height: 110, platter: false)
           VStack(spacing: 8) {
             Text(controller.currentProgram?.title ?? controller.channel.name)
-              .font(.system(size: 40, weight: .regular))
+              .font(.headline.weight(.regular))
               .foregroundStyle(.white)
               .lineLimit(1)
             Text(loadingSubtitle(controller))
-              .font(.system(size: 26, weight: .medium))
+              .font(.caption)
               .foregroundStyle(Theme.textSecondary)
           }
           SpectrumLoadingLine()
@@ -389,7 +396,7 @@ struct PlayerScreenContent: View {
             .tint(.white)
             .scaleEffect(1.2)
             .padding(22)
-            .background(Circle().fill(Color.black.opacity(0.5)))
+            .glassEffect(in: Circle())
             .padding(.top, 50)
             .padding(.trailing, Theme.screenMargin)
         }
@@ -413,12 +420,12 @@ struct PlayerScreenContent: View {
     if let notice = controller.notice {
       VStack {
         Text(notice)
-          .font(.system(size: 26, weight: .semibold))
+          .font(.caption.weight(.semibold))
           .foregroundStyle(.white)
           .padding(.horizontal, 28)
           .padding(.vertical, 14)
-          .background(Capsule().fill(Color.black.opacity(0.65)))
-          .padding(.top, 60)
+          .glassEffect(in: Capsule())
+          .padding(.top, Theme.verticalMargin)
         Spacer()
       }
       .transition(.opacity.combined(with: .move(edge: .top)))
@@ -433,32 +440,33 @@ struct PlayerScreenContent: View {
       VStack(spacing: 28) {
         ChannelLogo(channel: controller.channel, height: 90, platter: false)
         Text("Can't play \(controller.channel.name)")
-          .font(.system(size: 42, weight: .regular))
+          .font(.title3.weight(.regular))
           .foregroundStyle(.white)
+          .multilineTextAlignment(.center)
         Text(message)
-          .font(.system(size: 26))
+          .font(.body.weight(.regular))
           .foregroundStyle(Theme.textSecondary)
           .multilineTextAlignment(.center)
-          .frame(maxWidth: 820)
+          .frame(maxWidth: 900)
         HStack(spacing: 20) {
           Button { controller.retry() } label: {
             Label("Try Again", systemImage: "arrow.clockwise")
           }
-          .buttonStyle(.prominentPill)
+          .buttonStyle(.glassProminent)
           .focused($focus, equals: .failureRetry)
 
           if !controller.isLive {
             Button { controller.goLive() } label: {
               Label("Watch Live Instead", systemImage: "play.fill")
             }
-            .buttonStyle(.pill)
+            .buttonStyle(.glass)
             .focused($focus, equals: .failureLive)
           }
 
           Button(action: close) {
             Label("Close", systemImage: "xmark")
           }
-          .buttonStyle(.pill)
+          .buttonStyle(.glass)
           .focused($focus, equals: .failureClose)
         }
         .padding(.top, 10)
@@ -689,7 +697,7 @@ struct ProgrammeTimeline: View {
           if !isLive, nowMs > start, nowMs < end {
             VStack(spacing: 3) {
               Text("LIVE")
-                .font(.system(size: 16, weight: .semibold))
+                .font(.caption2.weight(.semibold))
                 .kerning(1.4)
                 .foregroundStyle(Theme.textOnFocus)
                 .padding(.horizontal, 8)
@@ -710,7 +718,7 @@ struct ProgrammeTimeline: View {
 
           if let previewFraction, let previewMs {
             Text(previewMs.dateFromMs.shortTime)
-              .font(.system(size: 22, weight: .bold))
+              .font(.caption2.weight(.bold))
               .foregroundStyle(Theme.textOnFocus)
               .padding(.horizontal, 12)
               .padding(.vertical, 6)
@@ -732,7 +740,7 @@ struct ProgrammeTimeline: View {
         Spacer()
         Text(end.dateFromMs.shortTime)
       }
-      .font(.system(size: 22, weight: .medium).monospacedDigit())
+      .font(.caption2.monospacedDigit())
       .foregroundStyle(.white.opacity(0.7))
     }
     .padding(.top, 26)
@@ -742,6 +750,21 @@ struct ProgrammeTimeline: View {
 
   private func fraction(_ ms: Int, start: Int, duration: Int) -> CGFloat {
     CGFloat(min(1, max(0, Double(ms - start) / Double(duration))))
+  }
+}
+
+// MARK: - Control labels
+
+/// Title and symbol side by side, or the symbol alone when the row has to stay on one line.
+struct PlayerControlLabelStyle: LabelStyle {
+  let iconOnly: Bool
+
+  func makeBody(configuration: Configuration) -> some View {
+    if iconOnly {
+      configuration.icon
+    } else {
+      Label(configuration)
+    }
   }
 }
 

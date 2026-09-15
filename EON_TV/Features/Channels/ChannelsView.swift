@@ -2,11 +2,13 @@ import SwiftUI
 
 /// Channel browsing: a filter rail (all, favourites, categories) over a tile grid. Filters
 /// apply on click, so directional moves through the rail never change the grid unexpectedly.
+/// The grid drops columns as the viewer's text size grows so tiles keep room for their captions.
 struct ChannelsView: View {
   @Environment(ContentStore.self) private var store
   @Environment(LiveClock.self) private var clock
   @Environment(FavoritesStore.self) private var favorites
   @Environment(PlaybackCoordinator.self) private var coordinator
+  @ScaledMetric(relativeTo: .caption) private var textScale: CGFloat = 1
 
   @State private var filter: Filter = .all
   @FocusState private var focus: Focus?
@@ -21,7 +23,16 @@ struct ChannelsView: View {
     case channel(Int)
   }
 
-  private let columns = Array(repeating: GridItem(.fixed(Theme.channelTileWidth), spacing: 34), count: 5)
+  private static let columnSpacing: CGFloat = 34
+
+  /// Tile width follows the caption size; the column count is whatever fits inside the margins.
+  private var tileWidth: CGFloat { Theme.channelTileWidth * min(textScale, Theme.maxArtworkScale) }
+
+  private var columns: [GridItem] {
+    let available = 1920 - Theme.screenMargin * 2 + Self.columnSpacing
+    let count = max(2, Int(available / (tileWidth + Self.columnSpacing)))
+    return Array(repeating: GridItem(.fixed(tileWidth), spacing: Self.columnSpacing), count: count)
+  }
 
   var body: some View {
     ZStack {
@@ -54,7 +65,7 @@ struct ChannelsView: View {
           .font(.screenTitle)
           .foregroundStyle(Theme.textPrimary)
         Text("\(visibleChannels.count)")
-          .font(.system(size: 30, weight: .light))
+          .font(.headline.weight(.regular))
           .foregroundStyle(Theme.textTertiary)
           .contentTransition(.numericText())
         Spacer()
@@ -106,7 +117,7 @@ struct ChannelsView: View {
     } label: {
       FilterChipLabel(title: title, symbol: symbol, isSelected: filter == value)
     }
-    .buttonStyle(.bare)
+    .buttonStyle(.glass)
     .focused($focus, equals: .filter(value))
   }
 
@@ -141,51 +152,20 @@ struct ChannelsView: View {
   private var emptyState: some View {
     VStack(spacing: 18) {
       Image(systemName: filter == .favorites ? "heart" : "tv")
-        .font(.system(size: 64, weight: .light))
+        .font(.title.weight(.light))
         .foregroundStyle(Theme.textTertiary)
       Text(filter == .favorites ? "No favorites yet" : "No channels here")
-        .font(.system(size: 34, weight: .regular))
+        .font(.headline.weight(.regular))
         .foregroundStyle(Theme.textPrimary)
       Text(filter == .favorites
            ? "Hold the touch surface on any channel and choose “Add to Favorites”."
            : "Nothing in this category is part of your subscription.")
-        .font(.system(size: 25))
+        .font(.body.weight(.regular))
         .foregroundStyle(Theme.textSecondary)
         .multilineTextAlignment(.center)
+        .frame(maxWidth: 900)
     }
     .frame(maxWidth: .infinity)
     .padding(.top, 120)
-  }
-}
-
-/// Filter chip that shows selection with an accent outline and focus with a white platter.
-struct FilterChipLabel: View {
-  let title: String
-  var symbol: String? = nil
-  let isSelected: Bool
-  @Environment(\.isFocused) private var isFocused
-
-  var body: some View {
-    HStack(spacing: 10) {
-      if let symbol {
-        Image(systemName: symbol)
-          .font(.system(size: 20, weight: .semibold))
-      }
-      Text(title)
-        .font(.system(size: 24, weight: .medium))
-    }
-    .foregroundStyle(isFocused ? Theme.textOnFocus : (isSelected ? Theme.textPrimary : Theme.textSecondary))
-    .padding(.horizontal, 26)
-    .padding(.vertical, 13)
-    .background {
-      Capsule().fill(isFocused ? Color.white : (isSelected ? Theme.surfaceStrong : Theme.surface))
-    }
-    .overlay {
-      Capsule().strokeBorder(isFocused ? Color.clear : (isSelected ? Theme.strokeStrong : Theme.stroke), lineWidth: 1.5)
-    }
-    .scaleEffect(isFocused ? 1.06 : 1)
-    .shadow(color: .black.opacity(isFocused ? 0.4 : 0), radius: 18, y: 10)
-    .animation(Theme.focusAnimation, value: isFocused)
-    .animation(Theme.focusAnimation, value: isSelected)
   }
 }
