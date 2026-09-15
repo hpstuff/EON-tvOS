@@ -41,7 +41,8 @@ struct AuroraRidgeShape: Shape {
 }
 
 /// The aurora: two blurred wave bands and a bright ridge, drawn once into a layer. `drifting`
-/// slides that layer slowly back and forth, which costs a transform per frame rather than a redraw.
+/// slides that layer slowly back and forth, which costs a transform per frame rather than a redraw;
+/// it holds still when the viewer prefers reduced motion or the system asks for a calmer interface.
 /// The `seed` picks the palette and the wave's shape, so tiles and placeholders differ.
 struct AuroraWaves: View {
   var seed: Int = 0
@@ -50,6 +51,7 @@ struct AuroraWaves: View {
   var drifting = false
 
   @State private var drifted = false
+  @Environment(\.prefersCalmInterface) private var calm
 
   var body: some View {
     let palette = AuroraGeometry.palette(seed: seed)
@@ -80,14 +82,14 @@ struct AuroraWaves: View {
       .frame(width: width, height: size.height)
       .blur(radius: size.height * blurFraction)
       .drawingGroup()
-      .offset(x: drifting ? (drifted ? -(width - size.width) : 0) : -(width - size.width) / 2)
+      .offset(x: drifting && !calm ? (drifted ? -(width - size.width) : 0) : -(width - size.width) / 2)
       .frame(width: size.width, height: size.height, alignment: .leading)
       .clipped()
     }
     .opacity(intensity)
     .allowsHitTesting(false)
     .onAppear {
-      guard drifting else { return }
+      guard drifting, !calm else { return }
       withAnimation(.easeInOut(duration: 18).repeatForever(autoreverses: true)) { drifted = true }
     }
   }

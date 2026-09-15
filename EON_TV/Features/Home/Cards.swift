@@ -3,6 +3,10 @@ import SwiftUI
 /// Programme + channel card used on every shelf. The artwork carries the channel logo, the
 /// live badge or start time and airing progress; the text below brightens with focus. The card
 /// is the label of a `.bare` button so only the artwork lifts, never the caption.
+///
+/// The card follows the viewer's text size: artwork grows with the caption (up to a cap) so a
+/// title keeps about the same number of characters, and at accessibility sizes the title may
+/// take a second line rather than truncate.
 struct ProgramCard: View {
   let channel: Channel
   let schedule: Schedule?
@@ -12,13 +16,16 @@ struct ProgramCard: View {
 
   @Environment(LiveClock.self) private var clock
   @Environment(\.isFocused) private var isFocused
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @ScaledMetric(relativeTo: .caption) private var textScale: CGFloat = 1
 
-  private var height: CGFloat { width * 9 / 16 }
+  private var scaledWidth: CGFloat { width * min(textScale, Theme.maxArtworkScale) }
+  private var height: CGFloat { scaledWidth * 9 / 16 }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       artwork
-        .frame(width: width, height: height)
+        .frame(width: scaledWidth, height: height)
         .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         .overlay {
           RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
@@ -35,7 +42,7 @@ struct ProgramCard: View {
         .offset(y: isFocused ? 10 : 0)
         .animation(Theme.focusAnimation, value: isFocused)
     }
-    .frame(width: width)
+    .frame(width: scaledWidth)
   }
 
   private var artwork: some View {
@@ -44,10 +51,10 @@ struct ProgramCard: View {
       RemoteImage(url: schedule?.posterURL) {
         ZStack {
           ArtworkPlaceholder(seed: channel.id)
-          ChannelLogo(channel: channel, height: 64, platter: false)
+          ChannelLogo(channel: channel, height: height * 0.28, platter: false)
         }
       }
-      .frame(width: width, height: height)
+      .frame(width: scaledWidth, height: height)
 
       LinearGradient(
         stops: [
@@ -98,7 +105,7 @@ struct ProgramCard: View {
         Text(schedule.title)
           .font(.cardTitle)
           .foregroundStyle(isFocused ? Theme.textPrimary : Theme.textPrimary.opacity(0.88))
-          .lineLimit(1)
+          .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
         Text(metaLine(for: schedule))
           .font(.cardMeta)
           .foregroundStyle(Theme.textSecondary)
@@ -109,7 +116,7 @@ struct ProgramCard: View {
           .foregroundStyle(Theme.textPrimary.opacity(0.88))
           .lineLimit(1)
         SkeletonBlock(cornerRadius: 6)
-          .frame(width: width * 0.55, height: 20)
+          .frame(width: scaledWidth * 0.55, height: 20)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -131,7 +138,7 @@ struct ProgramCard: View {
   }
 }
 
-/// Compact channel tile: the logo on glass with what's airing underneath.
+/// Compact channel tile: the logo on a tinted platter with what's airing underneath.
 struct ChannelTile: View {
   let channel: Channel
   let number: Int
@@ -141,13 +148,17 @@ struct ChannelTile: View {
 
   @Environment(LiveClock.self) private var clock
   @Environment(\.isFocused) private var isFocused
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @ScaledMetric(relativeTo: .caption) private var textScale: CGFloat = 1
+
+  private var scaledWidth: CGFloat { width * min(textScale, Theme.maxArtworkScale) }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       ZStack {
         RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
           .fill(isFocused ? AnyShapeStyle(Color.white.opacity(0.2)) : AnyShapeStyle(AuroraGeometry.palette(seed: channel.id).tileTint))
-        ChannelLogo(channel: channel, height: 72, platter: false)
+        ChannelLogo(channel: channel, height: scaledWidth * 0.24, platter: false)
           .padding(.horizontal, 28)
         VStack {
           HStack {
@@ -157,7 +168,7 @@ struct ChannelTile: View {
             Spacer()
             if isFavorite {
               Image(systemName: "heart.fill")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.9))
             }
           }
@@ -168,7 +179,7 @@ struct ChannelTile: View {
         }
         .padding(14)
       }
-      .frame(width: width, height: width * 9 / 16)
+      .frame(width: scaledWidth, height: scaledWidth * 9 / 16)
       .overlay {
         RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
           .strokeBorder(isFocused ? Color.white.opacity(0.9) : Theme.stroke, lineWidth: isFocused ? 4 : 1)
@@ -180,22 +191,22 @@ struct ChannelTile: View {
 
       VStack(alignment: .leading, spacing: 4) {
         Text(channel.name)
-          .font(.system(size: 24, weight: .medium))
+          .font(.cardTitle)
           .foregroundStyle(Theme.textPrimary.opacity(isFocused ? 1 : 0.88))
           .lineLimit(1)
         if let schedule {
           Text(schedule.title)
-            .font(.system(size: 21, weight: .medium))
+            .font(.cardMeta)
             .foregroundStyle(Theme.textSecondary)
-            .lineLimit(1)
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
         } else {
-          SkeletonBlock(cornerRadius: 5).frame(width: width * 0.6, height: 18)
+          SkeletonBlock(cornerRadius: 5).frame(width: scaledWidth * 0.6, height: 18)
         }
       }
       .padding(.horizontal, 4)
       .offset(y: isFocused ? 8 : 0)
     }
-    .frame(width: width)
+    .frame(width: scaledWidth)
     .animation(Theme.focusAnimation, value: isFocused)
   }
 }

@@ -89,16 +89,17 @@ struct SearchView: View {
   private func hint(symbol: String, title: String, message: String) -> some View {
     VStack(spacing: 18) {
       Image(systemName: symbol)
-        .font(.system(size: 60, weight: .light))
+        .font(.title.weight(.light))
         .foregroundStyle(Theme.textTertiary)
       Text(title)
-        .font(.system(size: 34, weight: .regular))
+        .font(.headline.weight(.regular))
         .foregroundStyle(Theme.textPrimary)
+        .multilineTextAlignment(.center)
       Text(message)
-        .font(.system(size: 25))
+        .font(.body.weight(.regular))
         .foregroundStyle(Theme.textSecondary)
         .multilineTextAlignment(.center)
-        .frame(maxWidth: 820)
+        .frame(maxWidth: 900)
     }
     .frame(maxWidth: .infinity)
     .padding(.top, 60)

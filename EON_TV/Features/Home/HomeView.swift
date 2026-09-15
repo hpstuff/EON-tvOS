@@ -125,7 +125,7 @@ struct HomeView: View {
     .onAppear(perform: claimInitialFocus)
   }
 
-  /// Content can appear after the skeleton, by which time the tab bar already took focus;
+  /// Content can appear after the skeleton, by which time the sidebar already took focus;
   /// the first time real content shows, land the viewer on the hero's primary action.
   private func claimInitialFocus() {
     guard !didClaimInitialFocus else { return }
@@ -299,8 +299,24 @@ struct HeroView: View {
 
   @Environment(ContentStore.self) private var store
   @Environment(LiveClock.self) private var clock
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   private var schedule: Schedule? { featured.schedule ?? store.nowPlaying(featured.channel) }
+  private var isAccessibilitySize: Bool { dynamicTypeSize.isAccessibilitySize }
+
+  /// Rows of short facts and the action row sit side by side at the default size and stack at
+  /// accessibility sizes, where the text needs the whole width; the artwork steps aside then too.
+  private var rowLayout: AnyLayout {
+    isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+      : AnyLayout(HStackLayout(spacing: 16))
+  }
+
+  private var actionLayout: AnyLayout {
+    isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+      : AnyLayout(HStackLayout(spacing: 20))
+  }
 
   var body: some View {
     let now = clock.nowMs
@@ -330,7 +346,7 @@ struct HeroView: View {
           .transition(.opacity)
 
         if let schedule {
-          HStack(spacing: 16) {
+          rowLayout {
             if schedule.isAiring(at: now) {
               LiveBadge()
             } else if schedule.isUpcoming(at: now) {
@@ -366,43 +382,45 @@ struct HeroView: View {
             Text(description)
               .font(.heroBody)
               .foregroundStyle(Theme.textSecondary)
-              .lineLimit(3)
-              .frame(maxWidth: 900, alignment: .leading)
+              .lineLimit(isAccessibilitySize ? 2 : 3)
+              .frame(maxWidth: isAccessibilitySize ? .infinity : 900, alignment: .leading)
           }
         } else {
           SkeletonBlock(cornerRadius: 8).frame(width: 420, height: 28)
           SkeletonBlock(cornerRadius: 8).frame(width: 760, height: 24)
         }
 
-        HStack(spacing: 20) {
+        actionLayout {
           Button(action: onPrimary) {
             Label(primaryTitle(schedule: schedule, now: now), systemImage: primarySymbol(schedule: schedule, now: now))
           }
-          .buttonStyle(.prominentPill)
+          .buttonStyle(.glassProminent)
           .focused(focus, equals: .hero(.primary))
 
           if let secondary = secondaryTitle(schedule: schedule, now: now) {
             Button(action: onSecondary) {
               Label(secondary.0, systemImage: secondary.1)
             }
-            .buttonStyle(.pill)
+            .buttonStyle(.glass)
             .focused(focus, equals: .hero(.secondary))
           }
 
           Button(action: onGuide) {
             Label("Guide", systemImage: "list.bullet.rectangle")
           }
-          .buttonStyle(.pill)
+          .buttonStyle(.glass)
           .focused(focus, equals: .hero(.guide))
         }
         .padding(.top, 6)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
 
-      artwork
+      if !isAccessibilitySize {
+        artwork
+      }
     }
     .padding(.horizontal, Theme.screenMargin)
-    .frame(height: 470)
+    .frame(minHeight: 470)
     .focusSection()
     .animation(Theme.crossfade, value: schedule?.id)
   }
