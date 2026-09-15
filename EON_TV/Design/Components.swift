@@ -2,63 +2,11 @@ import SwiftUI
 
 // MARK: - Button styles
 
-/// Artwork cards: lift, deepen the shadow and let the label brighten when focused.
-struct ArtworkCardButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    StyledLabel(configuration: configuration)
-  }
-
-  private struct StyledLabel: View {
-    let configuration: Configuration
-    @Environment(\.isFocused) private var isFocused
-
-    var body: some View {
-      configuration.label
-        .scaleEffect(isFocused ? 1.06 : 1)
-        .shadow(color: .black.opacity(isFocused ? 0.6 : 0.25), radius: isFocused ? 34 : 14, y: isFocused ? 22 : 8)
-        .brightness(configuration.isPressed ? -0.06 : 0)
-        .animation(Theme.focusAnimation, value: isFocused)
-        .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-  }
-}
-
-/// Text actions and chips: a hairline capsule, like the strokes of the mark, that becomes a
-/// solid white platter when focused. Prominent buttons carry a stronger outline so the primary
-/// action reads at rest.
-struct PillButtonStyle: ButtonStyle {
-  var prominent = false
-
-  func makeBody(configuration: Configuration) -> some View {
-    StyledLabel(configuration: configuration, prominent: prominent)
-  }
-
-  private struct StyledLabel: View {
-    let configuration: Configuration
-    let prominent: Bool
-    @Environment(\.isFocused) private var isFocused
-
-    var body: some View {
-      configuration.label
-        .font(.button)
-        .lineLimit(1)
-        .fixedSize(horizontal: true, vertical: false)
-        .foregroundStyle(isFocused ? Theme.textOnFocus : .white)
-        .padding(.horizontal, 30)
-        .padding(.vertical, 16)
-        .background {
-          Capsule().fill(isFocused ? Color.white : (prominent ? Theme.surfaceStrong : Theme.surface))
-        }
-        .overlay {
-          Capsule().strokeBorder(isFocused ? Color.clear : (prominent ? Theme.strokeStrong : Theme.stroke), lineWidth: 1.5)
-        }
-        .scaleEffect(isFocused ? 1.05 : 1)
-        .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 20, y: 12)
-        .opacity(configuration.isPressed ? 0.85 : 1)
-        .animation(Theme.focusAnimation, value: isFocused)
-    }
-  }
-}
+/// Text actions, chips and rows use the system's Liquid Glass button styles (`.glass` and
+/// `.glassProminent`): the platform draws the platter, the focus lift and the pressed state, so
+/// controls here look and move like controls everywhere else on tvOS. Only content — artwork
+/// cards and the packed guide grid — keeps a custom focus treatment, built on the standard
+/// focus APIs.
 
 /// Programme cells in the guide grid: no scaling (cells are packed), a white platter on focus.
 struct GuideCellButtonStyle: ButtonStyle {
@@ -100,21 +48,41 @@ struct BareButtonStyle: ButtonStyle {
   }
 }
 
-extension ButtonStyle where Self == ArtworkCardButtonStyle {
-  static var artworkCard: ArtworkCardButtonStyle { ArtworkCardButtonStyle() }
-}
-
-extension ButtonStyle where Self == PillButtonStyle {
-  static var pill: PillButtonStyle { PillButtonStyle() }
-  static var prominentPill: PillButtonStyle { PillButtonStyle(prominent: true) }
-}
-
 extension ButtonStyle where Self == GuideCellButtonStyle {
   static var guideCell: GuideCellButtonStyle { GuideCellButtonStyle() }
 }
 
 extension ButtonStyle where Self == BareButtonStyle {
   static var bare: BareButtonStyle { BareButtonStyle() }
+}
+
+// MARK: - Chips
+
+/// Label for a filter chip inside a glass button. Selection is shown in the label — heavier
+/// type and a short run of the spectrum — so the platter and focus stay the system's.
+struct FilterChipLabel: View {
+  let title: String
+  var symbol: String? = nil
+  let isSelected: Bool
+
+  var body: some View {
+    HStack(spacing: 10) {
+      if let symbol {
+        Image(systemName: symbol)
+          .font(.caption2.weight(.semibold))
+      }
+      Text(title)
+        .font(.caption.weight(isSelected ? .semibold : .regular))
+    }
+    .lineLimit(1)
+    .padding(.bottom, 6)
+    .overlay(alignment: .bottom) {
+      SpectrumLine(faded: false, height: 3)
+        .clipShape(Capsule())
+        .opacity(isSelected ? 1 : 0)
+    }
+    .animation(Theme.focusAnimation, value: isSelected)
+  }
 }
 
 // MARK: - Badges
@@ -124,15 +92,17 @@ extension ButtonStyle where Self == BareButtonStyle {
 struct LiveBadge: View {
   var compact = false
   @State private var breathing = false
+  @Environment(\.prefersCalmInterface) private var calm
+  @ScaledMetric(relativeTo: .caption2) private var dot: CGFloat = 10
 
   var body: some View {
     HStack(spacing: compact ? 7 : 9) {
       Circle()
         .fill(Theme.live)
-        .frame(width: compact ? 8 : 10, height: compact ? 8 : 10)
+        .frame(width: compact ? dot * 0.8 : dot, height: compact ? dot * 0.8 : dot)
         .opacity(breathing ? 0.5 : 1)
       Text("LIVE")
-        .font(compact ? .system(size: 15, weight: .semibold) : .badge)
+        .font(.badge)
         .kerning(1.6)
     }
     .foregroundStyle(.white)
@@ -141,7 +111,7 @@ struct LiveBadge: View {
     .background(Capsule().fill(Color.black.opacity(0.55)))
     .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
     .onAppear {
-      guard !compact else { return }
+      guard !compact, !calm else { return }
       withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { breathing = true }
     }
   }
@@ -156,6 +126,7 @@ struct Tag: View {
     Text(text)
       .font(.badge)
       .kerning(1.4)
+      .lineLimit(1)
       .foregroundStyle(solid ? Theme.textOnFocus : .white)
       .padding(.horizontal, 12)
       .padding(.vertical, 6)
@@ -204,7 +175,7 @@ struct SectionHeader: View {
         .foregroundStyle(Theme.textPrimary)
       if let subtitle {
         Text(subtitle)
-          .font(.system(size: 23, weight: .regular))
+          .font(.caption.weight(.regular))
           .foregroundStyle(Theme.textTertiary)
       }
       Spacer()
@@ -214,13 +185,15 @@ struct SectionHeader: View {
 
 // MARK: - Skeleton
 
-/// Shimmering placeholder used while artwork, cards or guide rows are still loading.
+/// Shimmering placeholder used while artwork, cards or guide rows are still loading. The shimmer
+/// pauses when the system prefers a calmer, cheaper interface.
 struct SkeletonBlock: View {
   var cornerRadius: CGFloat = Theme.tileRadius
+  @Environment(\.prefersCalmInterface) private var calm
 
   var body: some View {
-    TimelineView(.animation(minimumInterval: 1 / 30)) { context in
-      let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
+    TimelineView(.animation(minimumInterval: 1 / 30, paused: calm)) { context in
+      let phase = calm ? 0.5 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
       RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         .fill(Color.white.opacity(0.07))
         .overlay {
@@ -252,19 +225,20 @@ struct StatusView: View {
   var body: some View {
     VStack(spacing: 24) {
       Image(systemName: symbol)
-        .font(.system(size: 72, weight: .ultraLight))
+        .font(.title.weight(.light))
         .foregroundStyle(Theme.textSecondary)
       Text(title)
-        .font(.system(size: 40, weight: .regular))
+        .font(.headline.weight(.regular))
         .foregroundStyle(Theme.textPrimary)
+        .multilineTextAlignment(.center)
       Text(message)
-        .font(.system(size: 26))
+        .font(.body.weight(.regular))
         .foregroundStyle(Theme.textSecondary)
         .multilineTextAlignment(.center)
-        .frame(maxWidth: 760)
+        .frame(maxWidth: 900)
       if let actionTitle, let action {
         Button(actionTitle, action: action)
-          .buttonStyle(.prominentPill)
+          .buttonStyle(.glassProminent)
           .padding(.top, 12)
       }
     }
@@ -277,15 +251,18 @@ struct StatusView: View {
 
 /// The black canvas with a faint, blurred trace of the featured artwork behind a screen; it
 /// cross-fades when the featured image changes and always settles back into black at the foot.
+/// When the system prefers a calmer interface the aurora holds still and the blurred artwork is
+/// skipped, which is the costliest layer on screen.
 struct AmbientBackdrop: View {
   let url: URL?
   var intensity: Double = 0.4
+  @Environment(\.prefersCalmInterface) private var calm
 
   var body: some View {
     ZStack {
       Theme.backgroundGradient
       AuroraWaves(seed: 0, intensity: 0.45, drifting: true)
-      if let url {
+      if let url, !calm {
         RemoteImage(url: url) { Color.clear }
           .id(url)
           .transition(.opacity)

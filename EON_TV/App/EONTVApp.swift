@@ -12,6 +12,8 @@ struct EONTVApp: App {
         .environment(session.favorites)
         .environment(session.history)
         .preferredColorScheme(.dark)
+        // Emphasis is white throughout, so prominent glass controls read as white platters.
+        .tint(.white)
     }
   }
 }

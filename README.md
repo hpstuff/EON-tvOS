@@ -121,8 +121,11 @@ horizontal spectrum line that cuts through them.
 
 - **Canvas** – pure black, with only a faint blurred trace of the featured artwork behind a
   screen. Surfaces are near-black greys with hairline strokes; there is no tinted accent.
-- **Type** – light and regular weights for display text, medium only where text must be read at
-  a glance; small labels are uppercase with wide tracking. Nothing is heavy.
+- **Type** – the tvOS text styles (title2 for the hero, title3 for screen titles, callout for
+  shelf titles, caption and caption2 for card copy), so every label follows the viewer's Text
+  Size setting, which tvOS 27 made system-wide. Regular weight for display text, medium only
+  where text must be read at a glance; small labels are uppercase with wide tracking and never
+  drop below the platform's 23-point minimum. Nothing is heavy, and nothing is light.
 - **Spectrum** – the line is the only colour in the system. Every progress bar is a reveal of
   the spectrum fixed to the track, the guide's "now" marker is a vertical run of it, loading
   states are a piece of the line travelling along a track, and a faded rule separates the hero
@@ -133,8 +136,24 @@ horizontal spectrum line that cuts through them.
   per channel, channel tiles carry a near-black tint from the same palettes, and the demo
   posters are rendered from the same maths in CoreGraphics. Focused artwork gets a soft teal
   halo, the one place the aurora's light touches the interface itself.
-- **Focus** – tvOS convention: the focused element becomes a solid white platter with black
-  text; selection at rest is shown with a stronger hairline, never colour.
+- **Navigation** – the top-level sections live in the system sidebar (`TabView` with the
+  `.sidebarAdaptable` style): a floating Liquid Glass panel that collapses to a slim indicator
+  while you are inside a section, with Search pinned by its role. On tvOS 27 the sidebar also
+  carries the EON mark as its header and the household's package as its footer. Content runs
+  edge to edge beneath it, so the ambient backdrop and hero artwork continue under the glass.
+- **Controls** – buttons, chips, settings rows and text fields are the system's Liquid Glass
+  controls (`.glass`, `.glassProminent`, the default text field), tinted white, so focus lifts
+  and lights them exactly as it does across tvOS 26 and later. Only content keeps a custom focus
+  treatment built on the standard focus APIs: artwork cards scale and glow, guide cells turn into
+  a white platter. Selection at rest (a chip's filter, the sign-in method) is heavier type with a
+  short run of the spectrum, never colour.
+- **Text size** – layouts adapt rather than truncate. Artwork grows with its caption up to 1.6×,
+  the channel grid drops columns as tiles widen, the guide's rows, column and hour width scale
+  together, and at accessibility sizes the hero, details, sign-in and settings screens stack
+  vertically, captions may take two lines and the player's control row shows symbols only.
+- **Calm interface** – when Reduce Motion is on, or tvOS 27 reports that the system prefers
+  reduced resource usage, the aurora stops drifting, skeletons stop shimmering, the live badge
+  stops breathing and the blurred artwork behind screens is skipped.
 - **Mark** – `BrandGeometry` describes the letterforms, slice and line once in cap-height units.
   `BrandMark` draws it in SwiftUI (the launch screen animates the line in), and
   `Tools/BrandAssets` renders the layered App Icon (black back, line in the middle, letters in
@@ -201,8 +220,18 @@ xcodebuild test -project EON_TV.xcodeproj -scheme EON_TV -destination 'platform=
 ```
 
 The UI tests launch the demo, drive the Siri Remote through Home, Guide, Channels, Search,
-Settings, details, context menus and the player, and attach a screenshot after every step
-(export them with `xcrun xcresulttool export attachments`). `RealSessionPlaybackTests` drives
+Settings, details, context menus and the player (sections are reached through the sidebar:
+left from the first control opens it, up/down picks a section, right returns to content), and
+attach a screenshot after every step
+(export them with `xcrun xcresulttool export attachments`). To run the same walkthrough with
+Large Text, pass a content size category through the test runner's environment:
+
+```bash
+TEST_RUNNER_EON_TEXT_SIZE=UICTContentSizeCategoryAccessibilityL xcodebuild test -project EON_TV.xcodeproj -scheme EON_TV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' -only-testing:EON_TVUITests/RemoteWalkthroughTests
+```
+
+The app itself accepts the same override for a quick look:
+`-UIPreferredContentSizeCategoryName UICTContentSizeCategoryAccessibilityXXXL` as a launch argument. `RealSessionPlaybackTests` drives
 the player against real streams and skips itself unless the simulator is already signed in.
 `CodeSignInTests` does the opposite: on a signed-out simulator it switches the sign-in screen
 to the code option, which registers the device and requests a real code from the platform,

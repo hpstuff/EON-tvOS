@@ -54,9 +54,10 @@ struct SpectrumLine: View {
 /// along a dim track.
 struct SpectrumLoadingLine: View {
   var height: CGFloat = 3
+  @Environment(\.prefersCalmInterface) private var calm
 
   var body: some View {
-    TimelineView(.animation(minimumInterval: 1 / 60)) { context in
+    TimelineView(.animation(minimumInterval: calm ? 1 / 20 : 1 / 60)) { context in
       let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.5) / 1.5
       GeometryReader { proxy in
         let width = proxy.size.width
