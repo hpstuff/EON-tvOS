@@ -1,8 +1,12 @@
 import SwiftUI
 
-/// Design tokens for EON TV, drawn from the mark: a black canvas, thin white type, and one
-/// spectrum line that carries every accent. Every screen draws from this one vocabulary so the
-/// product reads as a single system rather than a set of API screens.
+/// Design tokens for EON TV, drawn from the mark: a black canvas, white type, and one spectrum
+/// line that carries every accent. Every screen draws from this one vocabulary so the product
+/// reads as a single system rather than a set of API screens.
+///
+/// Controls follow the platform: buttons, chips and fields use the system's Liquid Glass styles so
+/// focus looks and moves the way it does everywhere else on tvOS, and text uses the platform text
+/// styles so it follows the viewer's Text Size setting (system-wide on tvOS 27).
 enum Theme {
   // MARK: Colour
 
@@ -58,16 +62,23 @@ enum Theme {
 
   // MARK: Layout
 
+  /// The tvOS safe zone: 80 points at the sides, 60 at the top and bottom.
   static let screenMargin: CGFloat = 80
-  /// Breathing room between the tab bar and the first line of content.
-  static let contentTop: CGFloat = 64
+  static let verticalMargin: CGFloat = 60
+  /// Breathing room above a screen's first line, clear of the collapsed sidebar indicator.
+  static let contentTop: CGFloat = 48
   static let cardRadius: CGFloat = 14
   static let tileRadius: CGFloat = 12
   static let panelRadius: CGFloat = 20
   static let shelfSpacing: CGFloat = 44
   static let cardSpacing: CGFloat = 32
+  /// Base widths at the default text size; views scale them with `@ScaledMetric` so a caption
+  /// keeps roughly the same number of characters when the viewer enlarges text.
   static let programCardWidth: CGFloat = 400
   static let channelTileWidth: CGFloat = 300
+  /// Artwork stops growing past this factor even when text keeps scaling; captions are allowed
+  /// a second line instead, so shelves stay browsable at the largest accessibility sizes.
+  static let maxArtworkScale: CGFloat = 1.6
 
   // MARK: Motion
 
@@ -76,19 +87,31 @@ enum Theme {
   static let backdropFade = Animation.easeInOut(duration: 0.8)
 }
 
-/// Type follows the mark: light, open display faces, with medium weights only where text has
-/// to be read at a glance from across the room.
+/// Type uses the tvOS text styles so every label scales with the viewer's Text Size setting.
+/// Weights stay regular or heavier: light faces are hard to read from across the room.
+///
+/// tvOS default sizes: title 76 · title2 57 · title3 48 · headline 38 · body 29 · callout 31 ·
+/// caption 25 · caption2 23 (the platform minimum).
 extension Font {
-  static let heroTitle = Font.system(size: 58, weight: .light)
-  static let heroMeta = Font.system(size: 26, weight: .regular)
-  static let heroBody = Font.system(size: 26, weight: .regular)
-  static let screenTitle = Font.system(size: 44, weight: .light)
-  static let sectionTitle = Font.system(size: 32, weight: .regular)
-  static let cardTitle = Font.system(size: 25, weight: .medium)
-  static let cardMeta = Font.system(size: 21, weight: .regular)
-  static let button = Font.system(size: 25, weight: .medium)
-  static let badge = Font.system(size: 17, weight: .semibold)
-  static let guideCell = Font.system(size: 24, weight: .medium)
-  static let guideRuler = Font.system(size: 21, weight: .medium)
-  static let channelNumber = Font.system(size: 22, weight: .medium).monospacedDigit()
+  static let heroTitle = Font.title2.weight(.regular)
+  static let heroMeta = Font.caption.weight(.regular)
+  static let heroBody = Font.body.weight(.regular)
+  static let screenTitle = Font.title3.weight(.regular)
+  static let sectionTitle = Font.callout
+  static let cardTitle = Font.caption
+  static let cardMeta = Font.caption2.weight(.regular)
+  static let badge = Font.caption2.weight(.semibold)
+  static let guideCell = Font.caption
+  static let guideRuler = Font.caption2
+  static let channelNumber = Font.caption2.monospacedDigit()
+}
+
+extension EnvironmentValues {
+  /// True when the system asks apps to spend less on decoration (tvOS 27), or when the viewer
+  /// has Reduce Motion on. Ambient animation, shimmer and heavy blur step aside in either case.
+  var prefersCalmInterface: Bool {
+    if accessibilityReduceMotion { return true }
+    if #available(tvOS 27, *) { return systemPrefersReducedResourceUsage }
+    return false
+  }
 }

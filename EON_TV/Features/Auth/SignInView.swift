@@ -5,6 +5,8 @@ import SwiftUI
 /// screen collects input, shows the code and reports the outcome.
 struct SignInView: View {
   @Environment(AppSession.self) private var session
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @ScaledMetric(relativeTo: .title) private var codeSize: CGFloat = 84
 
   @State private var mode: Mode = .password
   @State private var username = ""
@@ -19,18 +21,34 @@ struct SignInView: View {
     case modePassword, modeCode, username, password, submit, newCode
   }
 
+  private var isAccessibilitySize: Bool { dynamicTypeSize.isAccessibilitySize }
+
+  /// Brand copy beside the form at the default size; above it when text is large.
+  private var layout: AnyLayout {
+    isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 40))
+      : AnyLayout(HStackLayout(spacing: 0))
+  }
+
   var body: some View {
     ZStack {
       AmbientBackdrop(url: nil)
 
-      HStack(spacing: 0) {
-        brandPanel
-          .frame(maxWidth: .infinity, alignment: .leading)
+      GeometryReader { proxy in
+        ScrollView(.vertical) {
+          layout {
+            brandPanel
+              .frame(maxWidth: .infinity, alignment: .leading)
 
-        form
-          .frame(width: 720)
+            form
+              .frame(width: isAccessibilitySize ? nil : 720)
+          }
+          .padding(.horizontal, Theme.screenMargin + 40)
+          .padding(.vertical, Theme.verticalMargin)
+          .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+        }
+        .scrollClipDisabled()
       }
-      .padding(.horizontal, Theme.screenMargin + 40)
     }
     .onAppear { if focus == nil { focus = .username } }
     .onChange(of: mode) { _, mode in
@@ -51,11 +69,11 @@ struct SignInView: View {
       BrandMark(height: 120)
       VStack(alignment: .leading, spacing: 14) {
         Text("Live TV, the guide and\nseven days of catch-up.")
-          .font(.system(size: 44, weight: .light))
+          .font(.title3.weight(.regular))
           .foregroundStyle(Theme.textPrimary)
           .lineSpacing(4)
         Text("Sign in with your EON account to start watching.")
-          .font(.system(size: 27))
+          .font(.body.weight(.regular))
           .foregroundStyle(Theme.textSecondary)
       }
     }
@@ -64,7 +82,7 @@ struct SignInView: View {
   private var form: some View {
     VStack(alignment: .leading, spacing: 26) {
       Text("Sign In")
-        .font(.system(size: 40, weight: .regular))
+        .font(.headline.weight(.regular))
         .foregroundStyle(Theme.textPrimary)
 
       modePicker
@@ -80,7 +98,7 @@ struct SignInView: View {
       Button("Explore the demo") {
         session.boot(demo: true)
       }
-      .buttonStyle(.pill)
+      .buttonStyle(.glass)
       .padding(.top, 8)
       #endif
     }
@@ -98,14 +116,20 @@ struct SignInView: View {
     .animation(Theme.crossfade, value: session.codeSignIn)
   }
 
+  /// Two chips rather than a segmented picker: choosing "Code" registers the device and requests
+  /// a code from the platform, so it must happen on a click, never as focus passes by.
   private var modePicker: some View {
     HStack(spacing: 14) {
-      Button("Password") { mode = .password }
-        .buttonStyle(mode == .password ? .prominentPill : .pill)
-        .focused($focus, equals: .modePassword)
-      Button("Code") { mode = .code }
-        .buttonStyle(mode == .code ? .prominentPill : .pill)
-        .focused($focus, equals: .modeCode)
+      Button { mode = .password } label: {
+        FilterChipLabel(title: "Password", symbol: "key.fill", isSelected: mode == .password)
+      }
+      .buttonStyle(.glass)
+      .focused($focus, equals: .modePassword)
+      Button { mode = .code } label: {
+        FilterChipLabel(title: "Code", symbol: "qrcode", isSelected: mode == .code)
+      }
+      .buttonStyle(.glass)
+      .focused($focus, equals: .modeCode)
     }
   }
 
@@ -113,7 +137,7 @@ struct SignInView: View {
 
   private var passwordForm: some View {
     Group {
-      field(title: "Username", isFocused: focus == .username) {
+      field(title: "Username") {
         TextField("Email or phone", text: $username)
           .textContentType(.username)
           .textInputAutocapitalization(.never)
@@ -123,7 +147,7 @@ struct SignInView: View {
           .onSubmit { focus = .password }
       }
 
-      field(title: "Password", isFocused: focus == .password) {
+      field(title: "Password") {
         SecureField("Password", text: $password)
           .textContentType(.password)
           .focused($focus, equals: .password)
@@ -139,13 +163,13 @@ struct SignInView: View {
       } label: {
         HStack(spacing: 14) {
           if session.isSigningIn {
-            ProgressView().tint(Theme.textOnFocus)
+            ProgressView()
           }
           Text(session.isSigningIn ? "Signing In…" : "Sign In")
         }
         .frame(maxWidth: .infinity)
       }
-      .buttonStyle(.prominentPill)
+      .buttonStyle(.glassProminent)
       .disabled(session.isSigningIn)
       .focused($focus, equals: .submit)
     }
@@ -156,7 +180,7 @@ struct SignInView: View {
   private var codeForm: some View {
     VStack(alignment: .leading, spacing: 22) {
       Text("On your phone or computer, sign in to EON, open Devices and enter this code to link this Apple TV.")
-        .font(.system(size: 24))
+        .font(.caption.weight(.regular))
         .foregroundStyle(Theme.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
 
@@ -166,7 +190,7 @@ struct SignInView: View {
         HStack(spacing: 14) {
           ProgressView().tint(Theme.textSecondary)
           Text("Getting a code…")
-            .font(.system(size: 23))
+            .font(.caption.weight(.regular))
             .foregroundStyle(Theme.textSecondary)
         }
 
@@ -175,7 +199,7 @@ struct SignInView: View {
         HStack(spacing: 14) {
           ProgressView().tint(Theme.textSecondary)
           Text("Waiting for you to confirm the code…")
-            .font(.system(size: 23))
+            .font(.caption.weight(.regular))
             .foregroundStyle(Theme.textSecondary)
           Spacer()
           HStack(spacing: 6) {
@@ -183,22 +207,23 @@ struct SignInView: View {
             Text(expiresAt, style: .timer)
               .monospacedDigit()
           }
-          .font(.system(size: 23, weight: .medium))
+          .font(.caption)
           .foregroundStyle(Theme.textTertiary)
+          .lineLimit(1)
         }
 
       case .expired:
         codePlate(nil)
         errorLabel("This code has expired. Get a new one to continue.")
         Button("Get a New Code") { session.startCodeSignIn() }
-          .buttonStyle(.prominentPill)
+          .buttonStyle(.glassProminent)
           .focused($focus, equals: .newCode)
 
       case .failed(let message):
         codePlate(nil)
         errorLabel(message)
         Button("Try Again") { session.startCodeSignIn() }
-          .buttonStyle(.prominentPill)
+          .buttonStyle(.glassProminent)
           .focused($focus, equals: .newCode)
       }
     }
@@ -210,13 +235,15 @@ struct SignInView: View {
       Spacer()
       if let code {
         Text(code)
-          .font(.system(size: 84, weight: .light, design: .monospaced))
-          .kerning(14)
+          .font(.system(size: codeSize, weight: .regular, design: .monospaced))
+          .kerning(codeSize / 6)
           .foregroundStyle(Theme.textPrimary)
+          .lineLimit(1)
+          .minimumScaleFactor(0.5)
           .accessibilityLabel("Code \(code.map(String.init).joined(separator: " "))")
       } else {
         SkeletonBlock()
-          .frame(width: 420, height: 84)
+          .frame(width: codeSize * 5, height: codeSize)
       }
       Spacer()
     }
@@ -235,33 +262,21 @@ struct SignInView: View {
 
   private func errorLabel(_ message: String) -> some View {
     Label(message, systemImage: "exclamationmark.triangle.fill")
-      .font(.system(size: 23, weight: .medium))
+      .font(.caption)
       .foregroundStyle(Theme.warning)
       .transition(.opacity)
   }
 
-  private func field<Content: View>(title: String, isFocused: Bool, @ViewBuilder content: () -> Content) -> some View {
+  /// A labelled system text field; the platform draws the field itself, including its focus.
+  private func field<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
     VStack(alignment: .leading, spacing: 10) {
       Text(title)
-        .font(.system(size: 21, weight: .medium))
+        .font(.caption2)
         .foregroundStyle(Theme.textTertiary)
         .textCase(.uppercase)
         .kerning(1)
       content()
-        .textFieldStyle(.plain)
-        .font(.system(size: 28))
-        .foregroundStyle(Theme.textPrimary)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 18)
-        .background {
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(isFocused ? Color.white.opacity(0.22) : Theme.surface)
-        }
-        .overlay {
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(isFocused ? Color.white.opacity(0.85) : Theme.stroke, lineWidth: isFocused ? 2 : 1)
-        }
-        .animation(Theme.focusAnimation, value: isFocused)
+        .font(.body.weight(.regular))
     }
   }
 }

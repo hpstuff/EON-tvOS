@@ -10,6 +10,7 @@ struct ProgramDetailView: View {
   @Environment(FavoritesStore.self) private var favorites
   @Environment(PlaybackCoordinator.self) private var coordinator
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   @FocusState private var focus: Focus?
 
@@ -20,6 +21,22 @@ struct ProgramDetailView: View {
 
   private var channel: Channel { item.channel }
   private var schedule: Schedule { item.schedule }
+  private var isAccessibilitySize: Bool { dynamicTypeSize.isAccessibilitySize }
+
+  /// Artwork beside the copy at the default size; above it, smaller, when text is large.
+  private var headerLayout: AnyLayout {
+    isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 32))
+      : AnyLayout(HStackLayout(alignment: .top, spacing: 56))
+  }
+
+  private var actionLayout: AnyLayout {
+    isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14))
+      : AnyLayout(HStackLayout(spacing: 18))
+  }
+
+  private var artworkWidth: CGFloat { isAccessibilitySize ? 560 : 720 }
 
   var body: some View {
     let now = clock.nowMs
@@ -28,14 +45,14 @@ struct ProgramDetailView: View {
 
       ScrollView(.vertical) {
         VStack(alignment: .leading, spacing: 40) {
-          HStack(alignment: .top, spacing: 56) {
+          headerLayout {
             RemoteImage(url: schedule.posterURL) {
               ZStack {
                 ArtworkPlaceholder(seed: channel.id)
                 ChannelLogo(channel: channel, height: 100, platter: false)
               }
             }
-            .frame(width: 720, height: 405)
+            .frame(width: artworkWidth, height: artworkWidth * 9 / 16)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .shadow(color: .black.opacity(0.6), radius: 40, y: 24)
             .shadow(color: Theme.glow.opacity(0.18), radius: 70)
@@ -51,7 +68,7 @@ struct ProgramDetailView: View {
                   .foregroundStyle(Theme.textTertiary)
               }
               Text(schedule.title)
-                .font(.system(size: 52, weight: .light))
+                .font(.heroTitle)
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(3)
               if let subtitle = schedule.subtitleText {
@@ -72,7 +89,7 @@ struct ProgramDetailView: View {
               Text(schedule.descriptionText ?? "No description available for this programme.")
                 .font(.heroBody)
                 .foregroundStyle(Theme.textSecondary)
-                .lineLimit(6)
+                .lineLimit(isAccessibilitySize ? 4 : 6)
 
               actions(now: now)
                 .padding(.top, 8)
@@ -80,7 +97,7 @@ struct ProgramDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
           }
           .padding(.horizontal, Theme.screenMargin)
-          .padding(.top, 60)
+          .padding(.top, Theme.verticalMargin)
           .focusSection()
 
           daySchedule(now: now)
@@ -110,36 +127,37 @@ struct ProgramDetailView: View {
   @ViewBuilder
   private func actions(now: Int) -> some View {
     let lineup = store.channels
-    HStack(spacing: 18) {
+    actionLayout {
       if schedule.isAiring(at: now) {
         Button { coordinator.playLive(channel, lineup: lineup); dismiss() } label: {
           Label("Watch Live", systemImage: "play.fill")
         }
-        .buttonStyle(.prominentPill)
+        .buttonStyle(.glassProminent)
         .focused($focus, equals: .primary)
         if channel.canStartOver {
           Button { coordinator.startOver(schedule, on: channel, lineup: lineup); dismiss() } label: {
             Label("Start Over", systemImage: "backward.end.fill")
           }
-          .buttonStyle(.pill)
+          .buttonStyle(.glass)
           .focused($focus, equals: .secondary)
         }
       } else if schedule.hasEnded(at: now), channel.isWithinCatchUpWindow(schedule, nowMs: now) {
         Button { coordinator.catchUp(schedule, on: channel, lineup: lineup); dismiss() } label: {
           Label("Play from Start", systemImage: "gobackward")
         }
-        .buttonStyle(.prominentPill)
+        .buttonStyle(.glassProminent)
         .focused($focus, equals: .primary)
         Button { coordinator.playLive(channel, lineup: lineup); dismiss() } label: {
           Label("Watch Live", systemImage: "play.fill")
         }
-        .buttonStyle(.pill)
+        .buttonStyle(.glass)
         .focused($focus, equals: .secondary)
       } else {
+        // The channel is named in the heading just above, so the button can stay short.
         Button { coordinator.playLive(channel, lineup: lineup); dismiss() } label: {
-          Label("Watch \(channel.name) Live", systemImage: "play.fill")
+          Label("Watch Live", systemImage: "play.fill")
         }
-        .buttonStyle(.prominentPill)
+        .buttonStyle(.glassProminent)
         .focused($focus, equals: .primary)
       }
 
@@ -149,15 +167,16 @@ struct ProgramDetailView: View {
           systemImage: favorites.contains(channel.id) ? "heart.fill" : "heart"
         )
       }
-      .buttonStyle(.pill)
+      .buttonStyle(.glass)
       .focused($focus, equals: .favorite)
 
       Button { coordinator.openGuide(for: channel); dismiss() } label: {
         Label("Guide", systemImage: "list.bullet.rectangle")
       }
-      .buttonStyle(.pill)
+      .buttonStyle(.glass)
       .focused($focus, equals: .guide)
     }
+    .lineLimit(1)
   }
 
   @ViewBuilder
