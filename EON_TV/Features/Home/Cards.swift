@@ -130,9 +130,9 @@ struct ProgramCard: View {
       parts.append("\(schedule.remainingMinutes(at: now)) min left")
     } else if schedule.isUpcoming(at: now) {
       let minutes = schedule.minutesUntilStart(at: now)
-      parts.append(minutes < 60 ? "Starts in \(minutes) min" : schedule.timeRangeText)
+      parts.append(minutes < 60 ? "Starts in \(minutes) min" : schedule.dayAndTimeRangeText)
     } else {
-      parts.append(schedule.timeRangeText)
+      parts.append(schedule.dayAndTimeRangeText)
     }
     return parts.joined(separator: " · ")
   }

@@ -354,7 +354,7 @@ struct HeroView: View {
             } else if channel.isWithinCatchUpWindow(schedule, nowMs: now) {
               Tag(text: "CATCH UP")
             }
-            Text(schedule.timeRangeText)
+            Text(schedule.dayAndTimeRangeText)
               .font(.heroMeta)
               .foregroundStyle(Theme.textSecondary)
             if let subtitle = schedule.subtitleText {
