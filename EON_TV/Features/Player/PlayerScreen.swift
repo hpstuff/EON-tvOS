@@ -297,12 +297,14 @@ struct PlayerScreenContent: View {
     }
     .buttonStyle(.bare)
     .focused($focus, equals: .timeline)
+    // Down is left to the focus engine: the button row below names Play as its entry point, so
+    // moving focus there is a single hop. Assigning focus here as well would make the engine's
+    // own pick flash first.
     .onMoveCommand { direction in
       switch direction {
       case .left: nudge(-1, controller)
       case .right: nudge(+1, controller)
-      case .down: focus = .button(.playPause)
-      case .up: break
+      case .down, .up: break
       @unknown default: break
       }
     }
@@ -337,6 +339,11 @@ struct PlayerScreenContent: View {
     // Six titled buttons no longer fit in a row at accessibility text sizes; the symbols carry
     // the meaning then, and VoiceOver still reads the titles.
     .labelStyle(PlayerControlLabelStyle(iconOnly: dynamicTypeSize.isAccessibilitySize))
+    // The row is one focus region whose entry point is Play. With `.userInitiated` priority the
+    // engine honours it when the viewer moves down from the timeline, instead of landing on
+    // whichever button happens to sit nearest the middle of the bar.
+    .focusSection()
+    .defaultFocus($focus, .button(.playPause), priority: .userInitiated)
   }
 
   /// One view identity for both timeshift states so focus survives switching between them.
