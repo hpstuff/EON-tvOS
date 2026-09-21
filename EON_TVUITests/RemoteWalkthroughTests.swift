@@ -151,6 +151,23 @@ final class RemoteWalkthroughTests: XCTestCase {
     press(.menu); wait(1); press(.menu); wait(1); press(.menu); wait(2); snap("panels-11-home")
   }
 
+  /// Skipping forward inside a finished programme must keep showing that programme, and a
+  /// further skip made while the new stream is still loading must build on the requested
+  /// position rather than falling through to live. Screenshots are taken during the load.
+  func testCatchUpSeekStaysInProgramme() {
+    // Fresh state: On Now, Up Next, Just Finished are the first three shelves.
+    press(.down, times: 3); wait(1); snap("seek-00-just-finished-shelf")
+    press(.select); wait(8); snap("seek-01-catch-up-playing")
+    press(.right); snap("seek-02-preview-then-commit")
+    // The commit fires 0.9 s after the press; the stream takes a moment longer to arrive.
+    usleep(200_000); snap("seek-03-loading-after-commit")
+    press(.right); snap("seek-04-second-skip-during-load")
+    wait(4); snap("seek-05-settled")
+    press(.right, times: 3); wait(4); snap("seek-06-after-three-skips")
+    press(.left, times: 2); wait(4); snap("seek-07-after-two-back")
+    press(.menu); wait(1); press(.menu); wait(1); press(.menu); wait(2); snap("seek-08-back-home")
+  }
+
   // MARK: Helpers
 
   /// Top-level sections in sidebar order (Search is pinned last by its role).

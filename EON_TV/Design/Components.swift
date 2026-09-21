@@ -21,8 +21,18 @@ struct GuideCellButtonStyle: ButtonStyle {
     var body: some View {
       configuration.label
         .environment(\.guideCellFocused, isFocused)
+        // Hundreds of cells share a grid; only the focused one carries a shadow, so the rest
+        // cost nothing beyond their own fill.
+        .background {
+          if isFocused {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+              .fill(Color.black.opacity(0.5))
+              .blur(radius: 18)
+              .offset(y: 10)
+              .transition(.opacity)
+          }
+        }
         .scaleEffect(isFocused ? 1.02 : 1)
-        .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 18, y: 10)
         .zIndex(isFocused ? 1 : 0)
         .animation(Theme.focusAnimation, value: isFocused)
     }
@@ -187,28 +197,36 @@ struct SectionHeader: View {
 
 /// Shimmering placeholder used while artwork, cards or guide rows are still loading. The shimmer
 /// pauses when the system prefers a calmer, cheaper interface.
+///
+/// The highlight is one animation handed to the render server per sweep, not a timeline that
+/// rebuilds the view thirty times a second: a loading guide shows a hundred of these at once,
+/// and rebuilding them all every frame is what made the grid stutter.
 struct SkeletonBlock: View {
   var cornerRadius: CGFloat = Theme.tileRadius
   @Environment(\.prefersCalmInterface) private var calm
 
   var body: some View {
-    TimelineView(.animation(minimumInterval: 1 / 30, paused: calm)) { context in
-      let phase = calm ? 0.5 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
-      RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        .fill(Color.white.opacity(0.07))
-        .overlay {
-          GeometryReader { proxy in
-            LinearGradient(
-              colors: [.clear, Color.white.opacity(0.10), .clear],
-              startPoint: .leading,
-              endPoint: .trailing
-            )
-            .frame(width: proxy.size.width * 0.6)
-            .offset(x: -proxy.size.width * 0.6 + (proxy.size.width * 1.6) * phase)
+    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+      .fill(Color.white.opacity(0.07))
+      .overlay {
+        if !calm {
+          PhaseAnimator([false, true]) { sweeping in
+            GeometryReader { proxy in
+              LinearGradient(
+                colors: [.clear, Color.white.opacity(0.10), .clear],
+                startPoint: .leading,
+                endPoint: .trailing
+              )
+              .frame(width: proxy.size.width * 0.6)
+              .offset(x: sweeping ? proxy.size.width : -proxy.size.width * 0.6)
+            }
+          } animation: { sweeping in
+            // Sweep across, then snap back out of sight and go again.
+            sweeping ? .linear(duration: 1.8) : .linear(duration: 0.01)
           }
           .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
-    }
+      }
   }
 }
 
@@ -253,23 +271,29 @@ struct StatusView: View {
 /// cross-fades when the featured image changes and always settles back into black at the foot.
 /// When the system prefers a calmer interface the aurora holds still and the blurred artwork is
 /// skipped, which is the costliest layer on screen.
+///
+/// The artwork only follows `url` once it has held still for a moment, so running focus along a
+/// shelf doesn't start a full-screen crossfade on every card. The blur is applied to the artwork
+/// at its native size and the result scaled up to fill the screen, which reads the same as
+/// blurring the screen-sized image and costs a small fraction of the pixels.
 struct AmbientBackdrop: View {
   let url: URL?
   var intensity: Double = 0.4
   @Environment(\.prefersCalmInterface) private var calm
+  @State private var shownURL: URL?
+
+  /// How long the featured artwork must stay the same before the backdrop takes it on.
+  static let settleDelay: Duration = .milliseconds(320)
 
   var body: some View {
     ZStack {
       Theme.backgroundGradient
       AuroraWaves(seed: 0, intensity: 0.45, drifting: true)
-      if let url, !calm {
-        RemoteImage(url: url) { Color.clear }
-          .id(url)
+      if let shownURL, !calm {
+        BlurredArtwork(url: shownURL)
+          .id(shownURL)
           .transition(.opacity)
-          .blur(radius: 100)
-          .saturation(0.9)
           .opacity(intensity * 0.5)
-          .scaleEffect(1.3)
       }
       LinearGradient(
         stops: [
@@ -281,8 +305,38 @@ struct AmbientBackdrop: View {
         endPoint: .bottom
       )
     }
-    .animation(Theme.backdropFade, value: url)
+    .animation(Theme.backdropFade, value: shownURL)
     .ignoresSafeArea()
+    .task(id: url) {
+      guard shownURL != nil else {
+        shownURL = url
+        return
+      }
+      try? await Task.sleep(for: Self.settleDelay)
+      guard !Task.isCancelled else { return }
+      shownURL = url
+    }
+  }
+}
+
+/// Artwork blurred at the platform's XL rendition size and stretched over the whole screen.
+private struct BlurredArtwork: View {
+  let url: URL
+  private static let renditionSize = CGSize(width: 480, height: 270)
+
+  var body: some View {
+    GeometryReader { proxy in
+      let size = Self.renditionSize
+      let scale = max(proxy.size.width / size.width, proxy.size.height / size.height) * 1.3
+      RemoteImage(url: url) { Color.clear }
+        .frame(width: size.width, height: size.height)
+        .clipped()
+        .blur(radius: 24)
+        .saturation(0.9)
+        .scaleEffect(scale)
+        .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+    }
+    .allowsHitTesting(false)
   }
 }
 
