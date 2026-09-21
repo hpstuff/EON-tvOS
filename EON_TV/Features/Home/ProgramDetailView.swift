@@ -197,6 +197,7 @@ struct ProgramDetailView: View {
         .focused($focus, equals: .program(entry.schedule.id))
         .contextMenu { ProgramContextMenu(item: entry, lineup: store.channels) }
       }
+      .equatable()
     }
   }
 }

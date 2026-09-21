@@ -275,6 +275,7 @@ struct GuideView: View {
               onSelectProgram: { schedule in select(schedule, on: channel, lineup: channels) },
               lineup: channels
             )
+            .equatable()
             .frame(width: metrics.dayWidth, height: metrics.rowHeight, alignment: .leading)
             .id(channel.id)
           }
@@ -506,7 +507,11 @@ private struct GuideChannelCellLabel: View {
 
 // MARK: - Row
 
-private struct GuideRow: View {
+/// One channel's day. Every focus move re-evaluates the guide (the header describes the focused
+/// programme), so rows compare equal by channel, day and line-up and are applied with
+/// `.equatable()`: a row's forty-odd cells are rebuilt only when its guide data or the clock
+/// changes, never because focus moved somewhere else in the grid.
+private struct GuideRow: View, Equatable {
   let channel: Channel
   let day: Date
   var focus: FocusState<GuideView.GuideFocus?>.Binding
@@ -516,6 +521,10 @@ private struct GuideRow: View {
   @Environment(ContentStore.self) private var store
   @Environment(LiveClock.self) private var clock
   @Environment(\.guideMetrics) private var metrics
+
+  static func == (lhs: GuideRow, rhs: GuideRow) -> Bool {
+    lhs.channel == rhs.channel && lhs.day == rhs.day && lhs.lineup == rhs.lineup
+  }
 
   private var dayStartMs: Int { day.timestamp }
   private var dayEndMs: Int { dayStartMs + 86_400_000 }

@@ -84,6 +84,22 @@ final class RealSessionPlaybackTests: XCTestCase {
     press(.menu); wait(3); snap("tsb-07-after-back-expect-home")
   }
 
+  /// Skipping inside a finished programme on a real timeshift stream. The programme shown and
+  /// the timeline must stay put while each new stream loads, and a skip made while one is still
+  /// loading must build on the requested position rather than fall through to live.
+  func testCatchUpSeekStaysInProgramme() {
+    // Fresh state: On Now, Up Next, Just Finished are the first three shelves once the guide is in.
+    wait(6)
+    press(.down, times: 3); wait(1); snap("rseek-00-just-finished-shelf")
+    press(.select); wait(12); snap("rseek-01-catch-up-playing")
+    press(.right); usleep(300_000); snap("rseek-02-loading-after-commit")
+    press(.right); snap("rseek-03-second-skip-during-load")
+    wait(6); snap("rseek-04-settled")
+    press(.right, times: 3); wait(6); snap("rseek-05-after-three-skips")
+    press(.left, times: 2); wait(6); snap("rseek-06-after-two-back")
+    press(.menu); wait(1); press(.menu); wait(2); snap("rseek-07-back-home")
+  }
+
   private func press(_ button: XCUIRemote.Button, times: Int = 1) {
     for _ in 0..<times {
       remote.press(button)
