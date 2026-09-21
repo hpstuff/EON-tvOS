@@ -69,6 +69,10 @@ final class PlayerController: NSObject {
   // Wall-clock anchoring: the player time at which `anchorWallMs` was the real-world position.
   private var anchorPlayerSeconds: Double?
   private var anchorWallMs: Int = 0
+  /// Where the stream now loading was asked to begin; `nil` for the live edge. Stands in for
+  /// the playhead until the new item is anchored, so the timeline, the programme shown and any
+  /// further skips all reason from the position the viewer chose, not from the live edge.
+  private var pendingStartMs: Int?
 
   private var loadTask: Task<Void, Never>?
   private var noticeTask: Task<Void, Never>?
@@ -153,11 +157,20 @@ final class PlayerController: NSObject {
   func load(channel: Channel, mode: PlaybackRequest.Mode) {
     saveResumePosition(force: true)
     loadTask?.cancel()
-    let obscures = channel != self.channel || player.currentItem == nil || phase != .playing
+    // The item that is still playing belongs to the previous request; nothing it reports from
+    // here on should steer the new one.
+    detachItemObservers()
+    let obscures = obscuresVideo(switchingTo: channel)
+    let previous = currentProgram
     self.channel = channel
     self.mode = mode
     self.phase = .loading(obscuresVideo: obscures)
-    self.currentProgram = mode.schedule ?? store.schedule(at: mode.requestedStartMs ?? clock.nowMs, channelID: channel.id) ?? store.nowPlaying(channel)
+    let start = mode.requestedStartMs
+    self.pendingStartMs = start
+    self.currentProgram = mode.schedule
+      ?? store.schedule(at: start ?? clock.nowMs, channelID: channel.id)
+      ?? Self.programme(previous, containing: start, on: channel)
+      ?? (start == nil ? store.nowPlaying(channel) : nil)
     anchorPlayerSeconds = nil
     pausedAtMs = nil
     pausedAt = nil
@@ -171,6 +184,27 @@ final class PlayerController: NSObject {
     }
   }
 
+  /// A first load, a channel change or a recovery from failure hides the old picture, which
+  /// would be the wrong channel or a frozen frame. A move within the same channel keeps the
+  /// picture, and a move made while an earlier one is still loading keeps whatever that one
+  /// decided rather than dropping the viewer to a black loading screen mid-seek.
+  private func obscuresVideo(switchingTo next: Channel) -> Bool {
+    guard next == channel, player.currentItem != nil else { return true }
+    switch phase {
+    case .playing: return false
+    case .loading(let obscures): return obscures
+    case .failed: return true
+    }
+  }
+
+  /// The programme already shown, if the new position still falls inside it. Keeps the title
+  /// steady across a skip when that day's guide isn't loaded yet.
+  private static func programme(_ programme: Schedule?, containing ms: Int?, on channel: Channel) -> Schedule? {
+    guard let programme, let ms, programme.channelId == channel.id,
+          programme.startTime <= ms, ms < programme.endTime else { return nil }
+    return programme
+  }
+
   private func resolveAndPlay() async {
     let channel = self.channel
     let mode = self.mode
@@ -182,6 +216,7 @@ final class PlayerController: NSObject {
       AppLog.player.notice("loading stream host=\(url.host() ?? "?", privacy: .public) mode=\(String(describing: mode), privacy: .public)")
       anchorWallMs = startMs == nil ? serverNowMs : resolvedStartMs
       anchorPlayerSeconds = nil
+      if startMs != nil { pendingStartMs = resolvedStartMs }
 
       let item = AVPlayerItem(url: url)
       attachItemObservers(item)
@@ -361,11 +396,13 @@ final class PlayerController: NSObject {
 
   // MARK: Playhead → programme
 
-  /// Real-world time the playhead currently corresponds to, in epoch milliseconds.
+  /// Real-world time the playhead currently corresponds to, in epoch milliseconds. While a
+  /// timeshift stream is still loading this is the instant it was requested at; `nil` only
+  /// while a live stream is loading, where the live edge is the honest answer.
   var playheadMs: Int? {
-    guard let anchor = anchorPlayerSeconds else { return nil }
+    guard let anchor = anchorPlayerSeconds else { return pendingStartMs }
     let seconds = player.currentTime().seconds
-    guard seconds.isFinite else { return nil }
+    guard seconds.isFinite else { return pendingStartMs }
     return anchorWallMs + Int((seconds - anchor) * 1000)
   }
 
@@ -416,14 +453,17 @@ final class PlayerController: NSObject {
   }
 
   private func ensureGuideLoaded() async {
+    let channel = self.channel
+    let mode = self.mode
     await store.ensureEPG(day: clock.dayStart, for: [channel])
     if let requested = mode.requestedStartMs {
       await store.ensureEPG(day: requested.dateFromMs, for: [channel])
     }
-    if currentProgram == nil {
-      currentProgram = store.schedule(at: mode.requestedStartMs ?? clock.nowMs, channelID: channel.id) ?? store.nowPlaying(channel)
-      publishNowPlaying()
-    }
+    guard channel == self.channel, mode == self.mode, currentProgram == nil else { return }
+    let start = mode.requestedStartMs
+    currentProgram = store.schedule(at: start ?? clock.nowMs, channelID: channel.id)
+      ?? (start == nil ? store.nowPlaying(channel) : nil)
+    publishNowPlaying()
   }
 
   // MARK: Now Playing
@@ -478,6 +518,7 @@ final class PlayerController: NSObject {
 
   private func handleStatus(_ item: AVPlayerItem) {
     AppLog.player.notice("item status=\(item.status.rawValue) error=\(String(describing: item.error), privacy: .public)")
+    guard item === player.currentItem else { return }
     switch item.status {
     case .readyToPlay:
       retryCount = 0

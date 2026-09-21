@@ -89,6 +89,42 @@ final class ContentLogicTests: XCTestCase {
     XCTAssertTrue(programmes.catchUp.allSatisfy { $0.channel.isWithinCatchUpWindow($0.schedule, nowMs: now) })
   }
 
+  /// Skipping inside a past programme requests a fresh timeshift stream. Until that stream is
+  /// anchored the controller must keep reporting the position the viewer asked for: falling
+  /// back to the live edge made the current programme flash in and turned the next skip into a
+  /// jump to live.
+  func testSeekKeepsRequestedPositionWhileTimeshiftStreamLoads() async {
+    let clock = LiveClock()
+    let store = ContentStore(backend: DemoBackend.make(), clock: clock)
+    await store.loadInitial()
+    guard let item = store.shelves.catchUp.first else { return XCTFail("demo guide offers no catch-up") }
+    let history = WatchHistory()
+    let controller = PlayerController(
+      request: PlaybackRequest(channel: item.channel, mode: .catchUp(item.schedule, offsetMs: 0), lineup: store.channels),
+      backend: DemoBackend.make(), store: store, history: history, favorites: FavoritesStore(), clock: clock
+    )
+    defer { controller.stop(); history.clear() }
+
+    let target = item.schedule.startTime + 60_000
+    controller.seek(toWallClockMs: target)
+    XCTAssertFalse(controller.isLive)
+    XCTAssertEqual(controller.playheadMs, target, "the playhead is where the stream was requested, not the live edge")
+    XCTAssertEqual(controller.currentProgram?.id, item.schedule.id)
+    XCTAssertEqual(controller.phase, .loading(obscuresVideo: true), "a first load has no picture to keep")
+
+    // A further skip while the first stream is still loading builds on the requested position.
+    let next = (controller.playheadMs ?? 0) + 15_000
+    controller.seek(toWallClockMs: next)
+    XCTAssertFalse(controller.isLive, "a skip made mid-load must not fall through to live")
+    XCTAssertEqual(controller.playheadMs, next)
+    XCTAssertEqual(controller.currentProgram?.id, item.schedule.id)
+
+    controller.load(channel: item.channel, mode: .live)
+    XCTAssertTrue(controller.isLive)
+    XCTAssertNil(controller.playheadMs, "while a live stream loads, the live edge is the position")
+    XCTAssertEqual(controller.currentProgram?.id, store.nowPlaying(item.channel)?.id)
+  }
+
   func testFavoritesToggleAndHistoryResumeRules() {
     let favorites = FavoritesStore()
     let channel = makeChannel(id: 987_654)

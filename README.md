@@ -203,6 +203,13 @@ Key decisions:
   exposes no APIs for them.
 - The player anchors the playhead to wall-clock time so the timeline, resume positions and
   the current programme follow the viewer across programme boundaries on continuous streams.
+  While a timeshift stream is still loading, the playhead reports the instant that stream was
+  requested at, so the programme shown, the timeline and any further skips reason from where
+  the viewer chose to be rather than from the live edge.
+- Screens rebuild as little as possible on a focus move: shelves and guide rows compare equal
+  when their content is unchanged (`.equatable()`), the hero and the blurred backdrop follow
+  focus only once it rests, artwork already in the memory cache paints on a card's first frame,
+  and skeletons, glows and shadows exist only where they are visible.
 - Remote model in the player: select shows controls · play/pause toggles · left/right skip ·
   down opens the schedule · up opens channels · Back cancels a skip, hides controls, then exits.
 - Back in the player is caught at the UIKit level (`BackInterceptingHost`), not only through

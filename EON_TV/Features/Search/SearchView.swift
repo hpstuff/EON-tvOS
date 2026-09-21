@@ -51,6 +51,7 @@ struct SearchView: View {
                 .focused($focus, equals: .channel(channel.id))
                 .onPlayPauseCommand { coordinator.playLive(channel, lineup: store.channels) }
               }
+              .equatable()
             }
             if !results.onNow.isEmpty {
               shelf("On Now", key: "now", items: results.onNow)
@@ -84,6 +85,7 @@ struct SearchView: View {
       .onPlayPauseCommand { coordinator.open(item, nowMs: clock.nowMs, lineup: store.channels) }
       .contextMenu { ProgramContextMenu(item: item, lineup: store.channels) }
     }
+    .equatable()
   }
 
   private func hint(symbol: String, title: String, message: String) -> some View {
