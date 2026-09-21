@@ -304,8 +304,10 @@ final class ContentStore {
     catchUp.sort { $0.schedule.endTime > $1.schedule.endTime }
 
     let fresh = Shelves(onNow: onNow, upNext: Array(upNext.prefix(40)), catchUp: Array(catchUp.prefix(40)))
-    nowByChannel = nowMap
-    nextByChannel = nextMap
+    // Every card asking "what's on" observes these maps; assign only on a real change so a
+    // quiet clock tick doesn't wake every shelf on screen.
+    if nowMap != nowByChannel { nowByChannel = nowMap }
+    if nextMap != nextByChannel { nextByChannel = nextMap }
     if fresh != shelves { shelves = fresh }
   }
 

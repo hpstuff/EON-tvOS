@@ -1,6 +1,11 @@
 import SwiftUI
 
 /// Artwork view backed by `ImagePipeline`. Cached images appear instantly; fresh loads fade in.
+///
+/// The memory cache is consulted synchronously while the body is built, so a card scrolling
+/// into view with artwork the app has already seen paints that artwork on its very first frame.
+/// Going through the loading task for cache hits would show the placeholder for a frame first,
+/// which reads as a flicker across a shelf while focus moves quickly.
 struct RemoteImage<Placeholder: View>: View {
   let url: URL?
   var contentMode: ContentMode = .fill
@@ -11,7 +16,7 @@ struct RemoteImage<Placeholder: View>: View {
 
   var body: some View {
     ZStack {
-      if let image, loadedURL == url {
+      if let image = resolvedImage {
         Image(uiImage: image)
           .resizable()
           .aspectRatio(contentMode: contentMode)
@@ -23,21 +28,20 @@ struct RemoteImage<Placeholder: View>: View {
     .task(id: url) { await load() }
   }
 
+  /// The image fetched for this URL, or whatever the memory cache already holds for it.
+  private var resolvedImage: UIImage? {
+    guard let url else { return nil }
+    if let image, loadedURL == url { return image }
+    return ImagePipeline.shared.cachedImage(for: url)
+  }
+
   private func load() async {
     guard let url else {
       image = nil
       loadedURL = nil
       return
     }
-    if let hit = ImagePipeline.shared.cachedImage(for: url) {
-      var transaction = Transaction()
-      transaction.disablesAnimations = true
-      withTransaction(transaction) {
-        image = hit
-        loadedURL = url
-      }
-      return
-    }
+    guard ImagePipeline.shared.cachedImage(for: url) == nil else { return }
     do {
       let loaded = try await ImagePipeline.shared.image(for: url)
       guard !Task.isCancelled else { return }

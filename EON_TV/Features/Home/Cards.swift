@@ -31,9 +31,11 @@ struct ProgramCard: View {
           RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
             .strokeBorder(Color.white.opacity(isFocused ? 0.9 : 0.08), lineWidth: isFocused ? 4 : 1)
         }
+        // One shadow for the card as a whole, not one per layer of artwork, gradient and badge.
+        .compositingGroup()
         .scaleEffect(isFocused ? 1.07 : 1)
         .shadow(color: .black.opacity(isFocused ? 0.6 : 0.25), radius: isFocused ? 34 : 14, y: isFocused ? 22 : 8)
-        .shadow(color: Theme.glow.opacity(isFocused ? 0.3 : 0), radius: 40)
+        .background { FocusGlow(cornerRadius: Theme.cardRadius, isFocused: isFocused) }
         .zIndex(isFocused ? 1 : 0)
         .animation(Theme.focusAnimation, value: isFocused)
 
@@ -184,9 +186,10 @@ struct ChannelTile: View {
         RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
           .strokeBorder(isFocused ? Color.white.opacity(0.9) : Theme.stroke, lineWidth: isFocused ? 4 : 1)
       }
+      .compositingGroup()
       .scaleEffect(isFocused ? 1.08 : 1)
       .shadow(color: .black.opacity(isFocused ? 0.55 : 0.2), radius: isFocused ? 30 : 10, y: isFocused ? 18 : 6)
-      .shadow(color: Theme.glow.opacity(isFocused ? 0.3 : 0), radius: 36)
+      .background { FocusGlow(cornerRadius: Theme.tileRadius, isFocused: isFocused, scale: 1.08, radius: 36) }
       .zIndex(isFocused ? 1 : 0)
 
       VStack(alignment: .leading, spacing: 4) {
@@ -211,37 +214,65 @@ struct ChannelTile: View {
   }
 }
 
+/// The teal halo behind focused artwork. It exists only while the card has focus, so the many
+/// cards at rest on a screen never render a blur they would show at zero opacity.
+struct FocusGlow: View {
+  let cornerRadius: CGFloat
+  let isFocused: Bool
+  var scale: CGFloat = 1.07
+  var radius: CGFloat = 40
+
+  var body: some View {
+    if isFocused {
+      RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        .fill(Theme.glow.opacity(0.3))
+        .scaleEffect(scale)
+        .blur(radius: radius)
+        .transition(.opacity)
+    }
+  }
+}
+
 /// Horizontal shelf of cards. Each shelf is its own focus section so vertical moves land on
 /// the nearest card in the next shelf, and horizontal moves never jump rows. A shelf can open
 /// scrolled to a particular item (e.g. the programme a details screen is about).
-struct Shelf<Item: Identifiable, Content: View>: View {
+///
+/// A shelf compares equal when its title and items are unchanged, and the screens that own
+/// shelves apply `.equatable()` so a hero or header changing above the shelves never rebuilds
+/// the cards below them. Anything the cards read from the stores still refreshes them, since
+/// those reads are observed from inside the shelf's own body.
+struct Shelf<Item: Identifiable & Equatable, Content: View>: View, Equatable {
   let title: String
   var subtitle: String? = nil
   let items: [Item]
   var initialItemID: Item.ID? = nil
   @ViewBuilder let content: (Item) -> Content
 
-  @State private var scrolledID: Item.ID?
+  static func == (lhs: Shelf, rhs: Shelf) -> Bool {
+    lhs.title == rhs.title && lhs.subtitle == rhs.subtitle
+      && lhs.initialItemID == rhs.initialItemID && lhs.items == rhs.items
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       SectionHeader(title: title, subtitle: subtitle)
         .padding(.horizontal, Theme.screenMargin)
-      ScrollView(.horizontal) {
-        LazyHStack(alignment: .top, spacing: Theme.cardSpacing) {
-          ForEach(items) { item in
-            content(item)
+      ScrollViewReader { proxy in
+        ScrollView(.horizontal) {
+          LazyHStack(alignment: .top, spacing: Theme.cardSpacing) {
+            ForEach(items) { item in
+              content(item)
+                .id(item.id)
+            }
           }
+          .padding(.top, 24)
+          .padding(.bottom, 34)
         }
-        .scrollTargetLayout()
-        .padding(.top, 24)
-        .padding(.bottom, 34)
-      }
-      .contentMargins(.horizontal, Theme.screenMargin, for: .scrollContent)
-      .scrollPosition(id: $scrolledID, anchor: .leading)
-      .scrollClipDisabled()
-      .onAppear {
-        if let initialItemID { scrolledID = initialItemID }
+        .contentMargins(.horizontal, Theme.screenMargin, for: .scrollContent)
+        .scrollClipDisabled()
+        .onAppear {
+          if let initialItemID { proxy.scrollTo(initialItemID, anchor: .leading) }
+        }
       }
     }
     .focusSection()

@@ -12,6 +12,7 @@ struct HomeView: View {
 
   @State private var featured: Featured?
   @State private var didClaimInitialFocus = false
+  @State private var heroFollower = HeroFollower()
   @FocusState private var focus: Focus?
 
   enum Focus: Hashable {
@@ -51,15 +52,17 @@ struct HomeView: View {
     }
     .onAppear(perform: seedFeatured)
     .onChange(of: store.channels) { _, _ in seedFeatured() }
-    .onChange(of: focus) { _, newValue in updateFeatured(for: newValue) }
+    .onChange(of: focus) { _, newValue in followFocus(newValue) }
     .onChange(of: clock.nowMs) { _, _ in store.recomputeShelves() }
   }
 
   // MARK: Content
 
+  /// Shelves are built lazily: a line-up with a dozen categories would otherwise keep a hundred
+  /// cards alive below the fold, all of them re-laid out whenever the hero changes.
   private var content: some View {
     ScrollView(.vertical) {
-      VStack(alignment: .leading, spacing: Theme.shelfSpacing) {
+      LazyVStack(alignment: .leading, spacing: Theme.shelfSpacing) {
         if let featured {
           HeroView(
             featured: featured,
@@ -80,6 +83,7 @@ struct HomeView: View {
           Shelf(title: "Continue Watching", items: resumes) { entry in
             resumeCard(entry)
           }
+          .equatable()
         }
 
         let recents = recentChannels
@@ -87,35 +91,41 @@ struct HomeView: View {
           Shelf(title: "Recently Watched", items: recents) { channel in
             channelCard(channel, shelf: "recent")
           }
+          .equatable()
         }
 
         Shelf(title: "On Now", subtitle: onNowSubtitle, items: store.shelves.onNow) { item in
           channelCard(item.channel, shelf: "onNow")
         }
+        .equatable()
 
         let favs = favorites.channels(in: store)
         if !favs.isEmpty {
           Shelf(title: "Favorites", items: favs) { channel in
             channelCard(channel, shelf: "favorites")
           }
+          .equatable()
         }
 
         if !store.shelves.upNext.isEmpty {
           Shelf(title: "Up Next", subtitle: "Starting soon", items: store.shelves.upNext) { item in
             programCard(item, shelf: "upNext")
           }
+          .equatable()
         }
 
         if !store.shelves.catchUp.isEmpty {
           Shelf(title: "Just Finished", subtitle: "Watch from the start", items: store.shelves.catchUp) { item in
             programCard(item, shelf: "catchUp")
           }
+          .equatable()
         }
 
         ForEach(store.browsableCategories) { category in
           Shelf(title: category.name, items: category.channels) { channel in
             channelCard(channel, shelf: "category-\(category.id)")
           }
+          .equatable()
         }
       }
       .padding(.bottom, 90)
@@ -201,7 +211,7 @@ struct HomeView: View {
 
   // MARK: Derived items
 
-  struct ResumeItem: Identifiable {
+  struct ResumeItem: Identifiable, Equatable {
     let channel: Channel
     let schedule: Schedule
     let positionMs: Int
@@ -242,6 +252,33 @@ struct HomeView: View {
     guard featured == nil, let first = store.channels.first else { return }
     let channel = history.lastChannelID.flatMap { store.channel($0) } ?? first
     featured = Featured(channel: channel, schedule: nil, resumeMs: nil)
+  }
+
+  /// Paces how the hero follows focus. A single move updates the hero at once; a run of quick
+  /// moves along a shelf updates it only once focus rests, so the title, artwork and backdrop
+  /// aren't torn down and rebuilt for cards the viewer is only passing over.
+  private final class HeroFollower {
+    var lastMove: Date = .distantPast
+    var pending: Task<Void, Never>?
+    static let restThreshold: TimeInterval = 0.4
+    static let settleDelay: Duration = .milliseconds(240)
+  }
+
+  private func followFocus(_ focus: Focus?) {
+    heroFollower.pending?.cancel()
+    guard case .card = focus else { return }
+    let now = Date()
+    let resting = now.timeIntervalSince(heroFollower.lastMove) > HeroFollower.restThreshold
+    heroFollower.lastMove = now
+    if resting {
+      updateFeatured(for: focus)
+    } else {
+      heroFollower.pending = Task {
+        try? await Task.sleep(for: HeroFollower.settleDelay)
+        guard !Task.isCancelled else { return }
+        updateFeatured(for: focus)
+      }
+    }
   }
 
   private func updateFeatured(for focus: Focus?) {
@@ -420,10 +457,17 @@ struct HeroView: View {
       }
     }
     .padding(.horizontal, Theme.screenMargin)
+    // A fixed height at the default size: a two-line title or a missing description must not
+    // move every shelf below, which would animate the whole screen on each focus change.
     .frame(minHeight: 470)
+    .frame(height: isAccessibilitySize ? nil : Self.fixedHeight)
     .focusSection()
     .animation(Theme.crossfade, value: schedule?.id)
   }
+
+  /// Room for the tallest hero at the default size: two title lines, the facts row, progress,
+  /// three lines of description and the action row.
+  static let fixedHeight: CGFloat = 520
 
   private var artwork: some View {
     let url = schedule?.posterURL
