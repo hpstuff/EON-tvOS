@@ -198,9 +198,10 @@ struct SectionHeader: View {
 /// Shimmering placeholder used while artwork, cards or guide rows are still loading. The shimmer
 /// pauses when the system prefers a calmer, cheaper interface.
 ///
-/// The highlight is one animation handed to the render server per sweep, not a timeline that
-/// rebuilds the view thirty times a second: a loading guide shows a hundred of these at once,
-/// and rebuilding them all every frame is what made the grid stutter.
+/// The highlight is a Core Animation sweep over a gradient layer, so it runs in the render
+/// server. A SwiftUI animation here — even one handed a whole sweep at a time — keeps the display
+/// link firing and the screen redrawing on every frame for as long as a skeleton is on screen,
+/// and a guide row that hasn't loaded yet shows a dozen at once while the viewer moves down.
 struct SkeletonBlock: View {
   var cornerRadius: CGFloat = Theme.tileRadius
   @Environment(\.prefersCalmInterface) private var calm
@@ -210,23 +211,59 @@ struct SkeletonBlock: View {
       .fill(Color.white.opacity(0.07))
       .overlay {
         if !calm {
-          PhaseAnimator([false, true]) { sweeping in
-            GeometryReader { proxy in
-              LinearGradient(
-                colors: [.clear, Color.white.opacity(0.10), .clear],
-                startPoint: .leading,
-                endPoint: .trailing
-              )
-              .frame(width: proxy.size.width * 0.6)
-              .offset(x: sweeping ? proxy.size.width : -proxy.size.width * 0.6)
-            }
-          } animation: { sweeping in
-            // Sweep across, then snap back out of sight and go again.
-            sweeping ? .linear(duration: 1.8) : .linear(duration: 0.01)
-          }
-          .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+          ShimmerSweep()
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         }
       }
+  }
+}
+
+/// A soft highlight that crosses its bounds every 1.8 seconds, snaps back and goes again.
+private struct ShimmerSweep: UIViewRepresentable {
+  func makeUIView(context: Context) -> ShimmerSweepView { ShimmerSweepView() }
+  func updateUIView(_ view: ShimmerSweepView, context: Context) {}
+}
+
+final class ShimmerSweepView: UIView {
+  private static let animationKey = "sweep"
+  private let highlight = CAGradientLayer()
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    isUserInteractionEnabled = false
+    clipsToBounds = true
+    highlight.colors = [UIColor.clear.cgColor, UIColor.white.withAlphaComponent(0.10).cgColor, UIColor.clear.cgColor]
+    highlight.startPoint = CGPoint(x: 0, y: 0.5)
+    highlight.endPoint = CGPoint(x: 1, y: 0.5)
+    layer.addSublayer(highlight)
+    // Core Animation drops animations while the app is in the background.
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(restartSweep), name: UIApplication.didBecomeActiveNotification, object: nil
+    )
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) { fatalError("ShimmerSweepView is created in code") }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let width = bounds.width * 0.6
+    let frame = CGRect(x: -width, y: 0, width: width, height: bounds.height)
+    guard highlight.frame != frame else { return }
+    highlight.frame = frame
+    restartSweep()
+  }
+
+  @objc private func restartSweep() {
+    highlight.removeAnimation(forKey: Self.animationKey)
+    guard bounds.width > 0 else { return }
+    let sweep = CABasicAnimation(keyPath: "transform.translation.x")
+    sweep.fromValue = 0
+    sweep.toValue = bounds.width + highlight.bounds.width
+    sweep.duration = 1.8
+    sweep.repeatCount = .infinity
+    sweep.timingFunction = CAMediaTimingFunction(name: .linear)
+    highlight.add(sweep, forKey: Self.animationKey)
   }
 }
 
@@ -288,7 +325,7 @@ struct AmbientBackdrop: View {
   var body: some View {
     ZStack {
       Theme.backgroundGradient
-      AuroraWaves(seed: 0, intensity: 0.45, drifting: true)
+      DriftingAurora(seed: 0, intensity: 0.45)
       if let shownURL, !calm {
         BlurredArtwork(url: shownURL)
           .id(shownURL)
