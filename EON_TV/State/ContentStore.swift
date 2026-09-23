@@ -76,6 +76,7 @@ final class ContentStore {
     self.backend = backend
     self.clock = clock
     clock.onDayChange = { [weak self] day in self?.handleDayChange(day) }
+    recomputeGuideDays()
   }
 
   func stop() {
@@ -127,6 +128,7 @@ final class ContentStore {
     channels = lineup
     channelsByID = Dictionary(lineup.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     channelNumbers = Dictionary(uniqueKeysWithValues: lineup.enumerated().map { ($1.id, $0 + 1) })
+    recomputeGuideDays()
     if !sameLineup {
       // Chunk membership follows the line-up, so previously loaded guide chunks no longer line up.
       loadedChunks.removeAll()
@@ -249,13 +251,17 @@ final class ContentStore {
   }
 
   /// Guide days offered to the viewer: as far back as catch-up reaches, ending today. Future
-  /// days are left out — nothing there can be played, only read.
-  var guideDays: [Date] {
+  /// days are left out — nothing there can be played, only read. Stored, and refreshed when the
+  /// line-up or the day changes: the guide reads it on every focus move.
+  private(set) var guideDays: [Date] = []
+
+  private func recomputeGuideDays() {
     let calendar = Calendar.current
     let today = clock.dayStart
     let maxWindow = channels.map(\.catchUpWindow).max() ?? 0
     let backDays = min(7, Int(maxWindow / 86_400))
-    return (-backDays...0).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+    let fresh = (-backDays...0).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+    if fresh != guideDays { guideDays = fresh }
   }
 
   // MARK: Now / next
@@ -353,6 +359,7 @@ final class ContentStore {
   // MARK: Freshness
 
   private func handleDayChange(_ day: Date) {
+    recomputeGuideDays()
     let cutoff = Calendar.current.date(byAdding: .day, value: -Self.keptDays, to: day) ?? day
     for key in epg.keys where key < cutoff {
       epg.removeValue(forKey: key)
