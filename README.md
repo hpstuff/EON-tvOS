@@ -210,8 +210,10 @@ Key decisions:
   when their content is unchanged (`.equatable()`), the hero and the blurred backdrop follow
   focus only once it rests, artwork already in the memory cache paints on a card's first frame,
   and skeletons, glows and shadows exist only where they are visible.
-- Remote model in the player: select shows controls · play/pause toggles · left/right skip ·
-  down opens the schedule · up opens channels · Back cancels a skip, hides controls, then exits.
+- Remote model in the player: select or any move shows the controls · play/pause toggles ·
+  left/right skip · up from the timeline reaches the round buttons above it · Back cancels a
+  skip, hides controls, then exits. The schedule, the channel list and the track options open
+  only from their buttons, the way the system player keeps its panels behind round controls.
 - Back in the player is caught at the UIKit level (`BackInterceptingHost`), not only through
   SwiftUI's `onExitCommand`. tvOS delivers a keyboard Escape (Simulator keyboard, Bluetooth
   keyboards) as a keyboard press rather than a Menu press, so SwiftUI ignores it and the
