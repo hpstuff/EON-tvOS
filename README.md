@@ -213,7 +213,9 @@ Key decisions:
 - Remote model in the player: select or any move shows the controls · play/pause toggles ·
   left/right skip · up from the timeline reaches the round buttons above it · Back cancels a
   skip, hides controls, then exits. The schedule, the channel list and the track options open
-  only from their buttons, the way the system player keeps its panels behind round controls.
+  only from their buttons, the way the system player keeps its panels behind round controls;
+  that row holds nothing else, since play/pause is the remote's own key and a press on the
+  timeline.
 - Back in the player is caught at the UIKit level (`BackInterceptingHost`), not only through
   SwiftUI's `onExitCommand`. tvOS delivers a keyboard Escape (Simulator keyboard, Bluetooth
   keyboards) as a keyboard press rather than a Menu press, so SwiftUI ignores it and the

@@ -30,6 +30,8 @@ struct PlayerScreen: View {
 ///   round buttons above it, Back cancels a pending skip, then hides the controls.
 /// - The schedule, the channel list and the track options open only from their buttons, the way
 ///   the system player keeps its panels behind the round controls rather than behind a swipe.
+///   Nothing else lives in that row: play/pause is the remote's own key and a press on the
+///   timeline, and a channel is favourited from the channel list, not from playback.
 struct PlayerScreenContent: View {
   let request: PlaybackRequest
   let back: BackRelay
@@ -42,7 +44,9 @@ struct PlayerScreenContent: View {
   @Environment(LiveClock.self) private var clock
   @Environment(PlaybackCoordinator.self) private var coordinator
   /// The round buttons grow with the viewer's text size, so the glyph never outgrows its circle.
-  @ScaledMetric(relativeTo: .title3) private var controlDiameter: CGFloat = 46
+  /// The glass style pads the label out to the platter, so the circle lands near 60pt — the
+  /// scale the system player draws these at.
+  @ScaledMetric(relativeTo: .body) private var controlDiameter: CGFloat = 28
 
   @State private var controller: PlayerController?
   @State private var controlsVisible = false
@@ -62,7 +66,7 @@ struct PlayerScreenContent: View {
   }
 
   enum ControlButton: Hashable {
-    case playPause, timeshift, schedule, channels, options, favorite
+    case timeshift, schedule, channels, options
   }
 
   enum PlayerFocus: Hashable {
@@ -307,9 +311,9 @@ struct PlayerScreenContent: View {
     }
     .buttonStyle(.bare)
     .focused($focus, equals: .timeline)
-    // Up is left to the focus engine: the button row above names Play as its entry point, so
-    // moving focus there is a single hop. Assigning focus here as well would make the engine's
-    // own pick flash first.
+    // Up is left to the focus engine: the button row above names its own entry point, so moving
+    // focus there is a single hop. Assigning focus here as well would make the engine's own pick
+    // flash first.
     .onMoveCommand { direction in
       switch direction {
       case .left: nudge(-1, controller)
@@ -326,13 +330,13 @@ struct PlayerScreenContent: View {
   /// identities: Start Over and Go Live share one button, and the options button is always
   /// present, so a press never removes the control that has focus.
   ///
+  /// There is no play/pause button, as there is none in the system player: the remote's own
+  /// play/pause key toggles playback wherever focus is, and so does a press on the timeline.
+  ///
   /// The symbols carry the meaning, as they do in the system player; the name of the focused
   /// button appears right above it, drawn as an overlay so naming it moves nothing.
   private func buttons(_ controller: PlayerController) -> some View {
     HStack(spacing: 18) {
-      controlButton(.playPause, controller, symbol: controller.isPaused ? "play.fill" : "pause.fill") {
-        controller.togglePlayPause()
-      }
       if let timeshift = timeshiftAction(controller) {
         controlButton(.timeshift, controller, symbol: timeshift.symbol, action: timeshift.action)
       }
@@ -345,17 +349,14 @@ struct PlayerScreenContent: View {
       controlButton(.options, controller, symbol: "captions.bubble") {
         openPanel(.options)
       }
-      controlButton(.favorite, controller, symbol: controller.isFavorite ? "heart.fill" : "heart") {
-        controller.toggleFavorite()
-      }
     }
     // Room for the name of the focused button, which the overlay draws above its circle.
     .padding(.top, 40)
-    // The row is one focus region whose entry point is Play. With `.userInitiated` priority the
-    // engine honours it when the viewer moves up from the timeline, instead of landing on
-    // whichever button happens to sit nearest the playhead.
+    // The row is one focus region entered on its first button, whichever that is on this
+    // channel. With `.userInitiated` priority the engine honours it when the viewer moves up
+    // from the timeline, instead of landing on whichever button sits nearest the playhead.
     .focusSection()
-    .defaultFocus($focus, .button(.playPause), priority: .userInitiated)
+    .defaultFocus($focus, .button(timeshiftAction(controller) == nil ? .schedule : .timeshift), priority: .userInitiated)
   }
 
   /// One view identity for both timeshift states so focus survives switching between them.
@@ -371,12 +372,10 @@ struct PlayerScreenContent: View {
   /// and what VoiceOver reads for the icon.
   private func buttonTitle(_ id: ControlButton, _ controller: PlayerController) -> String {
     switch id {
-    case .playPause: return controller.isPaused ? "Play" : "Pause"
     case .timeshift: return timeshiftAction(controller)?.title ?? ""
     case .schedule: return "Schedule"
     case .channels: return "Channels"
     case .options: return "Audio & Subtitles"
-    case .favorite: return controller.isFavorite ? "Favorite" : "Add Favorite"
     }
   }
 
@@ -387,7 +386,7 @@ struct PlayerScreenContent: View {
       scheduleAutoHide()
     } label: {
       Image(systemName: symbol)
-        .font(.title3)
+        .font(.body)
         // Equal sides, so the glass platter is a circle rather than a flattened capsule.
         .frame(width: controlDiameter, height: controlDiameter)
     }
