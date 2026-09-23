@@ -109,9 +109,10 @@ launch with the `-demo` argument. Demo playback uses Apple's public HLS sample s
   marker while skipping) and every move is a fresh timeshift request at a wall-clock instant.
   Skip back/forward in fixed 15-second steps or slide across the touchpad to scrub (one full
   slide covers a fifth of the programme; commit after a short pause or with select), pause and
-  resume exactly where you paused, Start Over and Go Live, a Schedule panel to jump to earlier
-  programmes, a Channels panel to switch, an Audio & Subtitles panel, favourite toggle, retry on
-  failure, and Back that hides controls first and then leaves.
+  resume exactly where you paused, and a row of round buttons above the timeline — Start Over
+  and Go Live, a Schedule panel to jump to earlier programmes, a Channels panel to switch, an
+  Audio & Subtitles panel — plus retry on failure and Back that hides controls first and then
+  leaves.
 - **Settings** – household details, refresh, clearing local data and sign-out.
 
 ## Design
@@ -220,8 +221,12 @@ Key decisions:
   at the right offsets. Nothing in SwiftUI animates continuously: the aurora's drift is a Core
   Animation transform, because a SwiftUI animation keeps the display link firing and the whole
   screen redrawing on every frame for as long as it runs.
-- Remote model in the player: select shows controls · play/pause toggles · left/right skip ·
-  down opens the schedule · up opens channels · Back cancels a skip, hides controls, then exits.
+- Remote model in the player: select or any move shows the controls · play/pause toggles ·
+  left/right skip · up from the timeline reaches the round buttons above it · Back cancels a
+  skip, hides controls, then exits. The schedule, the channel list and the track options open
+  only from their buttons, the way the system player keeps its panels behind round controls;
+  that row holds nothing else, since play/pause is the remote's own key and a press on the
+  timeline.
 - Back in the player is caught at the UIKit level (`BackInterceptingHost`), not only through
   SwiftUI's `onExitCommand`. tvOS delivers a keyboard Escape (Simulator keyboard, Bluetooth
   keyboards) as a keyboard press rather than a Menu press, so SwiftUI ignores it and the
