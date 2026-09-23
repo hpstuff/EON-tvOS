@@ -3,11 +3,32 @@ import Observation
 
 /// Scroll geometry shared with the channel column and the time ruler. Kept in its own
 /// observable so only those pieces re-render on every scroll frame, never the grid rows.
+///
+/// The rows follow `window` instead: the hours of the day worth building cells for. A row's
+/// cells are the costly part of the guide (every one is a focusable button with a context
+/// menu), so only those near the viewport exist, and the window moves in whole hours so rows
+/// re-evaluate a couple of times per screen of scrolling rather than on every frame.
 @Observable
 final class GuideScrollState {
   var offsetX: CGFloat = 0
   var offsetY: CGFloat = 0
+  var viewportWidth: CGFloat = 1_640
   var viewportHeight: CGFloat = 0
+  /// Milliseconds from the start of the day, snapped to whole hours.
+  private(set) var window: Range<Int> = 0..<0
+
+  func updateWindow(metrics: GuideMetrics) {
+    let fresh = metrics.buildWindow(offsetX: offsetX, viewportWidth: viewportWidth)
+    if fresh != window { window = fresh }
+  }
+
+  /// Called ahead of a programmatic scroll so the rows at the destination are built in the
+  /// same pass that moves there, instead of a frame later. Only the window moves; the offset
+  /// itself keeps following the scroll view, so the ruler never runs ahead of the grid.
+  func anticipate(offsetX target: CGFloat, metrics: GuideMetrics) {
+    let fresh = metrics.buildWindow(offsetX: max(0, target), viewportWidth: viewportWidth)
+    if fresh != window { window = fresh }
+  }
 }
 
 /// Grid geometry. Everything scales with the viewer's text size (`scale` is the caption text
@@ -15,6 +36,9 @@ final class GuideScrollState {
 /// cell whether text is default or accessibility sized.
 struct GuideMetrics: Equatable {
   var scale: CGFloat = 1
+
+  static let dayMs = 86_400_000
+  static let hourMs = 3_600_000
 
   var hourWidth: CGFloat { 640 * scale }
   var columnWidth: CGFloat { 280 * scale }
@@ -25,10 +49,40 @@ struct GuideMetrics: Equatable {
   var rowPitch: CGFloat { rowHeight + rowSpacing }
   var gridTopInset: CGFloat { rulerHeight + 8 }
   var dayWidth: CGFloat { hourWidth * 24 }
-  var pointsPerMs: CGFloat { hourWidth / 3_600_000 }
+  var pointsPerMs: CGFloat { hourWidth / CGFloat(Self.hourMs) }
 
   func x(forMs ms: Int, dayStartMs: Int) -> CGFloat {
     CGFloat(ms - dayStartMs) * pointsPerMs
+  }
+
+  /// The span of the day to build cells for at this horizontal offset: the viewport plus an
+  /// hour either side, widened to whole hours.
+  func buildWindow(offsetX: CGFloat, viewportWidth: CGFloat) -> Range<Int> {
+    let hour = Self.hourMs
+    let startMs = max(0, Int(((offsetX - hourWidth) / pointsPerMs).rounded()))
+    let endMs = min(Self.dayMs, Int(((offsetX + viewportWidth + hourWidth) / pointsPerMs).rounded()))
+    let lower = (startMs / hour) * hour
+    let upper = min(Self.dayMs, ((endMs + hour - 1) / hour) * hour)
+    return lower..<max(lower, upper)
+  }
+}
+
+extension Array where Element == Schedule {
+  /// Indices of the programmes to build for a window of the day, given a list sorted by start
+  /// time: every programme that overlaps the window plus one neighbour on each side, so focus
+  /// can always step left or right from a programme at the window's edge, however long it is.
+  /// `nil` when nothing in the list touches the window.
+  func guideRange(dayStartMs: Int, window: Range<Int>) -> Range<Int>? {
+    let windowStart = dayStartMs + window.lowerBound
+    let windowEnd = dayStartMs + window.upperBound
+    var first: Int?
+    var last: Int?
+    for (index, schedule) in enumerated() where schedule.endTime > windowStart && schedule.startTime < windowEnd {
+      if first == nil { first = index }
+      last = index
+    }
+    guard let first, let last else { return nil }
+    return Swift.max(0, first - 1)..<Swift.min(count, last + 2)
   }
 }
 
@@ -75,6 +129,7 @@ struct GuideView: View {
   private struct ScrollSnapshot: Equatable {
     var x: CGFloat
     var y: CGFloat
+    var width: CGFloat
     var height: CGFloat
   }
 
@@ -271,6 +326,7 @@ struct GuideView: View {
             GuideRow(
               channel: channel,
               day: day,
+              scroll: scroll,
               focus: $focus,
               onSelectProgram: { schedule in select(schedule, on: channel, lineup: channels) },
               lineup: channels
@@ -286,11 +342,24 @@ struct GuideView: View {
       }
       .scrollPosition($position)
       .onScrollGeometryChange(for: ScrollSnapshot.self) { geometry in
-        ScrollSnapshot(x: geometry.contentOffset.x, y: geometry.contentOffset.y, height: geometry.containerSize.height)
+        ScrollSnapshot(
+          x: geometry.contentOffset.x,
+          y: geometry.contentOffset.y,
+          width: geometry.containerSize.width,
+          height: geometry.containerSize.height
+        )
       } action: { _, snapshot in
         scroll.offsetX = max(0, snapshot.x)
         scroll.offsetY = max(0, snapshot.y)
+        scroll.viewportWidth = snapshot.width
         scroll.viewportHeight = snapshot.height
+        scroll.updateWindow(metrics: metrics)
+      }
+      // One handler for the whole grid rather than a command responder on every cell: play/pause
+      // opens the focused programme.
+      .onPlayPauseCommand {
+        guard case .cell = focus, let item = focusedItem else { return }
+        select(item.schedule, on: item.channel, lineup: channels)
       }
       .overlay(alignment: .topLeading) {
         GuideRuler(day: day, scroll: scroll)
@@ -392,13 +461,16 @@ struct GuideView: View {
       scrollToNow(animated: true)
     } else {
       // Other days open at prime time; mornings stay reachable by scrolling.
-      position.scrollTo(x: metrics.hourWidth * 19, y: scroll.offsetY)
+      let target = metrics.hourWidth * 19
+      scroll.anticipate(offsetX: target, metrics: metrics)
+      position.scrollTo(x: target, y: scroll.offsetY)
     }
   }
 
   private func scrollToNow(animated: Bool) {
     let nowX = metrics.x(forMs: clock.nowMs, dayStartMs: dayStartMs)
     let target = max(0, nowX - metrics.hourWidth * 0.5)
+    scroll.anticipate(offsetX: target, metrics: metrics)
     if animated {
       withAnimation(Theme.crossfade) { position.scrollTo(x: target, y: scroll.offsetY) }
     } else {
@@ -438,7 +510,6 @@ private struct GuideChannelColumn: View {
   var focus: FocusState<GuideView.GuideFocus?>.Binding
   let onSelect: (Channel) -> Void
 
-  @Environment(ContentStore.self) private var store
   @Environment(\.guideMetrics) private var metrics
 
   var body: some View {
@@ -448,24 +519,42 @@ private struct GuideChannelColumn: View {
       let count = Int(proxy.size.height / pitch) + 3
       let last = min(channels.count, first + count)
 
-      VStack(spacing: metrics.rowSpacing) {
-        if first < last {
-          ForEach(channels[first..<last]) { channel in
-            Button {
-              onSelect(channel)
-            } label: {
-              GuideChannelCellLabel(channel: channel, number: store.channelNumber(channel))
-            }
-            .buttonStyle(.bare)
-            .frame(height: metrics.rowHeight)
-            .focused(focus, equals: .channel(channel.id))
-          }
-        }
-      }
-      .frame(width: metrics.columnWidth - 12, alignment: .leading)
-      .offset(y: metrics.gridTopInset + CGFloat(first) * pitch - scroll.offsetY)
+      GuideChannelCells(channels: first < last ? Array(channels[first..<last]) : [], focus: focus, onSelect: onSelect)
+        .equatable()
+        .offset(y: metrics.gridTopInset + CGFloat(first) * pitch - scroll.offsetY)
     }
     .clipped()
+  }
+}
+
+/// The channel cells currently in view. A scroll frame that keeps the same rows on screen only
+/// moves this view; its cells are rebuilt when a row enters or leaves.
+private struct GuideChannelCells: View, Equatable {
+  let channels: [Channel]
+  var focus: FocusState<GuideView.GuideFocus?>.Binding
+  let onSelect: (Channel) -> Void
+
+  @Environment(ContentStore.self) private var store
+  @Environment(\.guideMetrics) private var metrics
+
+  static func == (lhs: GuideChannelCells, rhs: GuideChannelCells) -> Bool {
+    lhs.channels == rhs.channels
+  }
+
+  var body: some View {
+    VStack(spacing: metrics.rowSpacing) {
+      ForEach(channels) { channel in
+        Button {
+          onSelect(channel)
+        } label: {
+          GuideChannelCellLabel(channel: channel, number: store.channelNumber(channel))
+        }
+        .buttonStyle(.bare)
+        .frame(height: metrics.rowHeight)
+        .focused(focus, equals: .channel(channel.id))
+      }
+    }
+    .frame(width: metrics.columnWidth - 12, alignment: .leading)
   }
 }
 
@@ -495,12 +584,22 @@ private struct GuideChannelCellLabel: View {
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .fill(isFocused ? Color.white : Theme.backgroundElevated.opacity(0.9))
     }
+    // A dozen cells follow every scroll frame; only the focused one carries a shadow, so the
+    // others cost nothing beyond their platter.
+    .background {
+      if isFocused {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .fill(Color.black.opacity(0.5))
+          .blur(radius: 20)
+          .offset(x: 6)
+          .transition(.opacity)
+      }
+    }
     .overlay {
       RoundedRectangle(cornerRadius: 14, style: .continuous)
         .strokeBorder(isFocused ? Color.clear : Theme.stroke, lineWidth: 1)
     }
     .scaleEffect(isFocused ? 1.03 : 1)
-    .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 20, x: 6)
     .animation(Theme.focusAnimation, value: isFocused)
   }
 }
@@ -509,11 +608,17 @@ private struct GuideChannelCellLabel: View {
 
 /// One channel's day. Every focus move re-evaluates the guide (the header describes the focused
 /// programme), so rows compare equal by channel, day and line-up and are applied with
-/// `.equatable()`: a row's forty-odd cells are rebuilt only when its guide data or the clock
+/// `.equatable()`: a row is rebuilt only when its guide data, the clock or the build window
 /// changes, never because focus moved somewhere else in the grid.
+///
+/// Only the programmes inside the scroll state's window exist as cells — the viewport, an hour
+/// either side, and one neighbour beyond that so focus can always step off the edge. The rest of
+/// the day is empty space at the right offsets, so the row keeps the full day's width and cells
+/// never move when the window does.
 private struct GuideRow: View, Equatable {
   let channel: Channel
   let day: Date
+  let scroll: GuideScrollState
   var focus: FocusState<GuideView.GuideFocus?>.Binding
   let onSelectProgram: (Schedule) -> Void
   let lineup: [Channel]
@@ -526,19 +631,28 @@ private struct GuideRow: View, Equatable {
     lhs.channel == rhs.channel && lhs.day == rhs.day && lhs.lineup == rhs.lineup
   }
 
+  /// A programme placed in the row with its index in the day's list, so the gap to the next
+  /// programme is known without searching for it.
+  private struct Placed: Identifiable {
+    let index: Int
+    let schedule: Schedule
+    var id: Int { schedule.id }
+  }
+
   private var dayStartMs: Int { day.timestamp }
-  private var dayEndMs: Int { dayStartMs + 86_400_000 }
+  private var dayEndMs: Int { dayStartMs + GuideMetrics.dayMs }
 
   var body: some View {
     let state = store.epgState(for: channel.id, day: day)
+    let window = scroll.window
     ZStack(alignment: .leading) {
       switch state {
       case .loaded:
-        programmes(store.schedules(for: channel.id, day: day) ?? [])
+        programmes(store.schedules(for: channel.id, day: day) ?? [], window: window)
       case .failed:
-        failedCell
+        failedCell(window: window)
       default:
-        skeleton
+        skeleton(window: window)
       }
     }
     .frame(width: metrics.dayWidth, alignment: .leading)
@@ -550,23 +664,17 @@ private struct GuideRow: View, Equatable {
   }
 
   @ViewBuilder
-  private func programmes(_ list: [Schedule]) -> some View {
+  private func programmes(_ list: [Schedule], window: Range<Int>) -> some View {
     let now = clock.nowMs
-    let clipped = list.filter { $0.endTime > dayStartMs && $0.startTime < dayEndMs }
-    if clipped.isEmpty {
-      Text("No programme information")
-        .font(.guideCell)
-        .foregroundStyle(Theme.textTertiary)
-        .padding(.horizontal, 24)
-        .frame(width: metrics.hourWidth * 3, height: metrics.rowHeight, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface.opacity(0.5)))
-    } else {
+    let dayList = list.filter { $0.endTime > dayStartMs && $0.startTime < dayEndMs }
+    if let range = dayList.guideRange(dayStartMs: dayStartMs, window: window) {
       HStack(spacing: metrics.cellGap) {
-        let firstStart = max(clipped[0].startTime, dayStartMs)
+        let firstStart = max(dayList[range.lowerBound].startTime, dayStartMs)
         if firstStart > dayStartMs {
           Color.clear.frame(width: metrics.x(forMs: firstStart, dayStartMs: dayStartMs) - metrics.cellGap)
         }
-        ForEach(Array(clipped.enumerated()), id: \.element.id) { index, schedule in
+        ForEach(range.map { Placed(index: $0, schedule: dayList[$0]) }) { placed in
+          let schedule = placed.schedule
           let start = max(schedule.startTime, dayStartMs)
           let end = min(schedule.endTime, dayEndMs)
           let width = max(24, CGFloat(end - start) * metrics.pointsPerMs - metrics.cellGap)
@@ -577,31 +685,60 @@ private struct GuideRow: View, Equatable {
           }
           .buttonStyle(.guideCell)
           .focused(focus, equals: .cell(channel: channel.id, id: schedule.id))
-          .onPlayPauseCommand { onSelectProgram(schedule) }
           .contextMenu {
             ProgramContextMenu(item: .init(channel: channel, schedule: schedule), lineup: lineup)
           }
-          if index < clipped.count - 1 {
-            let gap = CGFloat(clipped[index + 1].startTime - schedule.endTime) * metrics.pointsPerMs
+          if placed.index + 1 < dayList.count {
+            let gap = CGFloat(dayList[placed.index + 1].startTime - schedule.endTime) * metrics.pointsPerMs
             if gap > metrics.cellGap * 2 {
               Color.clear.frame(width: gap - metrics.cellGap)
             }
           }
         }
       }
+    } else {
+      Text("No programme information")
+        .font(.guideCell)
+        .foregroundStyle(Theme.textTertiary)
+        .padding(.horizontal, 24)
+        .frame(width: metrics.hourWidth * 3, height: metrics.rowHeight, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.surface.opacity(0.5)))
+        .padding(.leading, noticeLeading(in: window))
     }
   }
 
-  private var skeleton: some View {
-    HStack(spacing: metrics.cellGap) {
-      ForEach(0..<12, id: \.self) { index in
+  /// Where a notice standing in for programmes goes: centred on the window, which keeps it on
+  /// screen wherever the viewer has scrolled to instead of at the start of the day.
+  private func noticeLeading(in window: Range<Int>) -> CGFloat {
+    let start = CGFloat(window.lowerBound) * metrics.pointsPerMs
+    let span = CGFloat(window.count) * metrics.pointsPerMs
+    return start + max(0, (span - metrics.hourWidth * 3) / 2)
+  }
+
+  /// Placeholder blocks covering the window while this channel's guide loads.
+  private func skeleton(window: Range<Int>) -> some View {
+    let pattern: [CGFloat] = [420, 300, 640, 360, 520]
+    let start = CGFloat(window.lowerBound) * metrics.pointsPerMs
+    let span = CGFloat(window.count) * metrics.pointsPerMs
+    var blocks: [CGFloat] = []
+    var covered: CGFloat = 0
+    while covered < span {
+      let width = pattern[(blocks.count + channel.id) % pattern.count] * metrics.scale
+      blocks.append(width - metrics.cellGap)
+      covered += width
+    }
+    return HStack(spacing: metrics.cellGap) {
+      if start > 0 {
+        Color.clear.frame(width: start - metrics.cellGap)
+      }
+      ForEach(Array(blocks.enumerated()), id: \.offset) { _, width in
         SkeletonBlock(cornerRadius: 14)
-          .frame(width: [420, 300, 640, 360, 520][(index + channel.id) % 5] * metrics.scale - metrics.cellGap, height: metrics.rowHeight)
+          .frame(width: width, height: metrics.rowHeight)
       }
     }
   }
 
-  private var failedCell: some View {
+  private func failedCell(window: Range<Int>) -> some View {
     Button {
       Task { await store.retryFailedEPG(day: day) }
     } label: {
@@ -609,7 +746,7 @@ private struct GuideRow: View, Equatable {
     }
     .buttonStyle(.glass)
     .focused(focus, equals: .retry(channel.id))
-    .padding(.leading, 12)
+    .padding(.leading, noticeLeading(in: window) + 12)
     .frame(height: metrics.rowHeight)
   }
 }
@@ -679,7 +816,9 @@ private struct GuideCell: View {
   }
 }
 
-/// Half-hour time ruler pinned above the programme area, scrolling horizontally with it.
+/// Half-hour time ruler pinned above the programme area, scrolling horizontally with it. The
+/// marks are a separate view compared by day, so a scroll frame moves them without rebuilding
+/// (and re-formatting) forty-eight labels.
 private struct GuideRuler: View {
   let day: Date
   let scroll: GuideScrollState
@@ -687,21 +826,11 @@ private struct GuideRuler: View {
 
   var body: some View {
     GeometryReader { proxy in
-      HStack(spacing: 0) {
-        ForEach(0..<48, id: \.self) { slot in
-          let date = day.addingTimeInterval(TimeInterval(slot) * 1800)
-          HStack(spacing: 10) {
-            Rectangle().fill(Theme.stroke).frame(width: 2, height: 16)
-            Text(date.shortTime)
-              .font(.guideRuler)
-              .foregroundStyle(Theme.textSecondary)
-          }
-          .frame(width: metrics.hourWidth / 2, alignment: .leading)
-        }
-      }
-      .offset(x: -scroll.offsetX)
-      .frame(width: proxy.size.width, alignment: .leading)
-      .clipped()
+      GuideRulerMarks(day: day)
+        .equatable()
+        .offset(x: -scroll.offsetX)
+        .frame(width: proxy.size.width, alignment: .leading)
+        .clipped()
     }
     .frame(height: metrics.rulerHeight)
     .background(alignment: .top) {
@@ -710,6 +839,31 @@ private struct GuideRuler: View {
           .frame(height: metrics.rulerHeight + 4)
         LinearGradient(colors: [Theme.background.opacity(0.97), .clear], startPoint: .top, endPoint: .bottom)
           .frame(height: 14)
+      }
+    }
+  }
+}
+
+/// The forty-eight half-hour marks of one day.
+private struct GuideRulerMarks: View, Equatable {
+  let day: Date
+  @Environment(\.guideMetrics) private var metrics
+
+  static func == (lhs: GuideRulerMarks, rhs: GuideRulerMarks) -> Bool {
+    lhs.day == rhs.day
+  }
+
+  var body: some View {
+    HStack(spacing: 0) {
+      ForEach(0..<48, id: \.self) { slot in
+        let date = day.addingTimeInterval(TimeInterval(slot) * 1800)
+        HStack(spacing: 10) {
+          Rectangle().fill(Theme.stroke).frame(width: 2, height: 16)
+          Text(date.shortTime)
+            .font(.guideRuler)
+            .foregroundStyle(Theme.textSecondary)
+        }
+        .frame(width: metrics.hourWidth / 2, alignment: .leading)
       }
     }
   }
