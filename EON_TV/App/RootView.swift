@@ -56,7 +56,7 @@ struct LaunchView: View {
 
   var body: some View {
     ZStack {
-      AuroraWaves(seed: 2, intensity: 0.35, drifting: true)
+      DriftingAurora(seed: 2, intensity: 0.35)
         .ignoresSafeArea()
       BrandMark(height: 168, lineProgress: lineProgress)
         .opacity(breathing ? 0.86 : 1)

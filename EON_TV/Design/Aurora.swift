@@ -40,18 +40,13 @@ struct AuroraRidgeShape: Shape {
   }
 }
 
-/// The aurora: two blurred wave bands and a bright ridge, drawn once into a layer. `drifting`
-/// slides that layer slowly back and forth, which costs a transform per frame rather than a redraw;
-/// it holds still when the viewer prefers reduced motion or the system asks for a calmer interface.
-/// The `seed` picks the palette and the wave's shape, so tiles and placeholders differ.
+/// The aurora: two blurred wave bands and a bright ridge, drawn once into a layer and held
+/// still. The `seed` picks the palette and the wave's shape, so tiles and placeholders differ.
+/// `DriftingAurora` is the moving variant behind whole screens.
 struct AuroraWaves: View {
   var seed: Int = 0
   var intensity: Double = 1
   var blurFraction: CGFloat = 0.08
-  var drifting = false
-
-  @State private var drifted = false
-  @Environment(\.prefersCalmInterface) private var calm
 
   var body: some View {
     let palette = AuroraGeometry.palette(seed: seed)
@@ -82,15 +77,86 @@ struct AuroraWaves: View {
       .frame(width: width, height: size.height)
       .blur(radius: size.height * blurFraction)
       .drawingGroup()
-      .offset(x: drifting && !calm ? (drifted ? -(width - size.width) : 0) : -(width - size.width) / 2)
+      .offset(x: -(width - size.width) / 2)
       .frame(width: size.width, height: size.height, alignment: .leading)
       .clipped()
     }
     .opacity(intensity)
     .allowsHitTesting(false)
-    .onAppear {
-      guard drifting, !calm else { return }
-      withAnimation(.easeInOut(duration: 18).repeatForever(autoreverses: true)) { drifted = true }
-    }
+  }
+}
+
+/// The aurora behind a whole screen, sliding slowly back and forth.
+///
+/// The motion is a Core Animation transform on a hosted copy of `AuroraWaves`, so it runs in the
+/// render server. Animating the offset in SwiftUI instead kept the display link firing and the
+/// screen redrawing on every frame for as long as the screen was up — on the guide, with its
+/// hundreds of cells and glass chips, that was most of the main thread before a single press.
+/// The aurora holds still when the viewer prefers reduced motion or the system asks for a calmer
+/// interface.
+struct DriftingAurora: UIViewRepresentable {
+  var seed: Int = 0
+  var intensity: Double = 1
+  @Environment(\.prefersCalmInterface) private var calm
+
+  func makeUIView(context: Context) -> DriftingAuroraView {
+    DriftingAuroraView(waves: AuroraWaves(seed: seed, intensity: intensity))
+  }
+
+  func updateUIView(_ view: DriftingAuroraView, context: Context) {
+    view.host.rootView = AuroraWaves(seed: seed, intensity: intensity)
+    view.isDrifting = !calm
+  }
+}
+
+final class DriftingAuroraView: UIView {
+  /// The aurora is drawn this much wider than the screen; the drift covers the difference.
+  static let overscan: CGFloat = 1.35
+  static let period: CFTimeInterval = 18
+  private static let animationKey = "drift"
+
+  let host: UIHostingController<AuroraWaves>
+  var isDrifting = true {
+    didSet { if isDrifting != oldValue { updateDrift() } }
+  }
+
+  init(waves: AuroraWaves) {
+    host = UIHostingController(rootView: waves)
+    super.init(frame: .zero)
+    host.view.backgroundColor = .clear
+    isUserInteractionEnabled = false
+    clipsToBounds = true
+    addSubview(host.view)
+    // Core Animation drops animations while the app is in the background.
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(updateDrift), name: UIApplication.didBecomeActiveNotification, object: nil
+    )
+  }
+
+  @available(*, unavailable)
+  required init?(coder: NSCoder) { fatalError("DriftingAuroraView is created in code") }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let size = CGSize(width: bounds.width * Self.overscan, height: bounds.height)
+    guard host.view.bounds.size != size else { return }
+    host.view.bounds = CGRect(origin: .zero, size: size)
+    host.view.center = CGPoint(x: size.width / 2, y: size.height / 2)
+    updateDrift()
+  }
+
+  @objc private func updateDrift() {
+    let layer = host.view.layer
+    layer.removeAnimation(forKey: Self.animationKey)
+    let travel = bounds.width * (Self.overscan - 1)
+    guard isDrifting, travel > 0 else { return }
+    let drift = CABasicAnimation(keyPath: "transform.translation.x")
+    drift.fromValue = 0
+    drift.toValue = -travel
+    drift.duration = Self.period
+    drift.autoreverses = true
+    drift.repeatCount = .infinity
+    drift.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+    layer.add(drift, forKey: Self.animationKey)
   }
 }
