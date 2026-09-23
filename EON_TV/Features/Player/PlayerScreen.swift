@@ -24,11 +24,12 @@ struct PlayerScreen: View {
 /// pause-resume, start over) becomes a fresh timeshift request at a wall-clock instant.
 ///
 /// Remote model
-/// - Controls hidden: select shows controls · play/pause toggles · left/right skip a fixed step
-///   (preview, then commit) · a touchpad slide scrubs · down opens the schedule · up opens
-///   channels · Back leaves the player.
-/// - Controls visible: the timeline has focus; left/right skip, a slide scrubs, down reaches the
-///   buttons, Back cancels a pending skip, then hides the controls.
+/// - Controls hidden: select or up shows the controls · play/pause toggles · left/right skip a
+///   fixed step (preview, then commit) · a touchpad slide scrubs · Back leaves the player.
+/// - Controls visible: the timeline has focus; left/right skip, a slide scrubs, up reaches the
+///   round buttons above it, Back cancels a pending skip, then hides the controls.
+/// - The schedule, the channel list and the track options open only from their buttons, the way
+///   the system player keeps its panels behind the round controls rather than behind a swipe.
 struct PlayerScreenContent: View {
   let request: PlaybackRequest
   let back: BackRelay
@@ -40,7 +41,8 @@ struct PlayerScreenContent: View {
   @Environment(FavoritesStore.self) private var favorites
   @Environment(LiveClock.self) private var clock
   @Environment(PlaybackCoordinator.self) private var coordinator
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  /// The round buttons grow with the viewer's text size, so the glyph never outgrows its circle.
+  @ScaledMetric(relativeTo: .title3) private var controlDiameter: CGFloat = 46
 
   @State private var controller: PlayerController?
   @State private var controlsVisible = false
@@ -167,12 +169,13 @@ struct PlayerScreenContent: View {
     .focused($focus, equals: .surface)
     .defaultFocus($focus, .surface)
     .onAppear { focus = .surface }
+    // Every direction brings the controls up, the way the system player answers any move with
+    // its transport bar. The panels are behind the round buttons, never behind a bare swipe.
     .onMoveCommand { direction in
       switch direction {
       case .left: showControls(focusTimeline: true); nudge(-1, controller)
       case .right: showControls(focusTimeline: true); nudge(+1, controller)
-      case .down: openPanel(.schedule)
-      case .up: openPanel(.channels)
+      case .up, .down: showControls(focusTimeline: true)
       @unknown default: break
       }
     }
@@ -201,41 +204,48 @@ struct PlayerScreenContent: View {
 
       Spacer()
 
-      VStack(alignment: .leading, spacing: 16) {
-        HStack(spacing: 14) {
-          ChannelLogo(channel: controller.channel, height: 40, platter: false)
-          Text(controller.channel.name)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.white.opacity(0.9))
-          Text("· Channel \(store.channelNumber(controller.channel))")
-            .font(.caption)
-            .foregroundStyle(.white.opacity(0.55))
-          Spacer()
-          statusBadge(controller, displayedMs: displayedMs, now: now)
-        }
-
-        Text(programme?.title ?? controller.channel.name)
-          .font(.title3.weight(.regular))
-          .foregroundStyle(.white)
-          .lineLimit(1)
-
-        if let programme {
-          HStack(spacing: 14) {
-            Text(programme.timeRangeText)
-              .font(.caption)
-              .foregroundStyle(.white.opacity(0.7))
-            if let subtitle = programme.subtitleText {
-              Text(subtitle)
+      VStack(alignment: .leading, spacing: 18) {
+        // What is playing on the left, the round buttons on the right, both sitting on the
+        // timeline — the arrangement the system player uses.
+        HStack(alignment: .bottom, spacing: 40) {
+          VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+              ChannelLogo(channel: controller.channel, height: 40, platter: false)
+              Text(controller.channel.name)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.9))
+              Text("· Channel \(store.channelNumber(controller.channel))")
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.5))
-                .lineLimit(1)
+                .foregroundStyle(.white.opacity(0.55))
+              statusBadge(controller, displayedMs: displayedMs, now: now)
+            }
+
+            Text(programme?.title ?? controller.channel.name)
+              .font(.title3.weight(.regular))
+              .foregroundStyle(.white)
+              .lineLimit(1)
+
+            if let programme {
+              HStack(spacing: 14) {
+                Text(programme.timeRangeText)
+                  .font(.caption)
+                  .foregroundStyle(.white.opacity(0.7))
+                if let subtitle = programme.subtitleText {
+                  Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.5))
+                    .lineLimit(1)
+                }
+              }
             }
           }
+
+          Spacer(minLength: 20)
+
+          buttons(controller)
         }
 
         timeline(controller, programme: programme, playheadMs: playhead, now: now)
-
-        buttons(controller)
       }
       .padding(.horizontal, Theme.screenMargin)
       .padding(.bottom, 56)
@@ -297,7 +307,7 @@ struct PlayerScreenContent: View {
     }
     .buttonStyle(.bare)
     .focused($focus, equals: .timeline)
-    // Down is left to the focus engine: the button row below names Play as its entry point, so
+    // Up is left to the focus engine: the button row above names Play as its entry point, so
     // moving focus there is a single hop. Assigning focus here as well would make the engine's
     // own pick flash first.
     .onMoveCommand { direction in
@@ -312,36 +322,38 @@ struct PlayerScreenContent: View {
 
   // MARK: Buttons
 
-  /// The row keeps a stable set of identities: Start Over and Go Live share one button, and the
-  /// options button is always present, so a press never removes the control that has focus.
+  /// Round icon buttons above the timeline, right-aligned. The row keeps a stable set of
+  /// identities: Start Over and Go Live share one button, and the options button is always
+  /// present, so a press never removes the control that has focus.
+  ///
+  /// The symbols carry the meaning, as they do in the system player; the name of the focused
+  /// button appears right above it, drawn as an overlay so naming it moves nothing.
   private func buttons(_ controller: PlayerController) -> some View {
-    HStack(spacing: 16) {
-      controlButton(.playPause, title: controller.isPaused ? "Play" : "Pause", symbol: controller.isPaused ? "play.fill" : "pause.fill") {
+    HStack(spacing: 18) {
+      controlButton(.playPause, controller, symbol: controller.isPaused ? "play.fill" : "pause.fill") {
         controller.togglePlayPause()
       }
       if let timeshift = timeshiftAction(controller) {
-        controlButton(.timeshift, title: timeshift.title, symbol: timeshift.symbol, action: timeshift.action)
+        controlButton(.timeshift, controller, symbol: timeshift.symbol, action: timeshift.action)
       }
-      controlButton(.schedule, title: "Schedule", symbol: "list.bullet.rectangle") {
+      controlButton(.schedule, controller, symbol: "list.bullet.rectangle") {
         openPanel(.schedule)
       }
-      controlButton(.channels, title: "Channels", symbol: "tv") {
+      controlButton(.channels, controller, symbol: "tv") {
         openPanel(.channels)
       }
-      controlButton(.options, title: "Audio & Subtitles", symbol: "captions.bubble") {
+      controlButton(.options, controller, symbol: "captions.bubble") {
         openPanel(.options)
       }
-      controlButton(.favorite, title: controller.isFavorite ? "Favorite" : "Add Favorite", symbol: controller.isFavorite ? "heart.fill" : "heart") {
+      controlButton(.favorite, controller, symbol: controller.isFavorite ? "heart.fill" : "heart") {
         controller.toggleFavorite()
       }
-      Spacer()
     }
-    // Six titled buttons no longer fit in a row at accessibility text sizes; the symbols carry
-    // the meaning then, and VoiceOver still reads the titles.
-    .labelStyle(PlayerControlLabelStyle(iconOnly: dynamicTypeSize.isAccessibilitySize))
+    // Room for the name of the focused button, which the overlay draws above its circle.
+    .padding(.top, 40)
     // The row is one focus region whose entry point is Play. With `.userInitiated` priority the
-    // engine honours it when the viewer moves down from the timeline, instead of landing on
-    // whichever button happens to sit nearest the middle of the bar.
+    // engine honours it when the viewer moves up from the timeline, instead of landing on
+    // whichever button happens to sit nearest the playhead.
     .focusSection()
     .defaultFocus($focus, .button(.playPause), priority: .userInitiated)
   }
@@ -355,18 +367,45 @@ struct PlayerScreenContent: View {
     return ("Go Live", "dot.radiowaves.left.and.right", { controller.goLive() })
   }
 
-  private func controlButton(_ id: ControlButton, title: String, symbol: String, action: @escaping () -> Void) -> some View {
-    Button {
+  /// The one place a button's name is written: the caption shown above it while it holds focus,
+  /// and what VoiceOver reads for the icon.
+  private func buttonTitle(_ id: ControlButton, _ controller: PlayerController) -> String {
+    switch id {
+    case .playPause: return controller.isPaused ? "Play" : "Pause"
+    case .timeshift: return timeshiftAction(controller)?.title ?? ""
+    case .schedule: return "Schedule"
+    case .channels: return "Channels"
+    case .options: return "Audio & Subtitles"
+    case .favorite: return controller.isFavorite ? "Favorite" : "Add Favorite"
+    }
+  }
+
+  private func controlButton(_ id: ControlButton, _ controller: PlayerController, symbol: String, action: @escaping () -> Void) -> some View {
+    let title = buttonTitle(id, controller)
+    return Button {
       action()
       scheduleAutoHide()
     } label: {
-      Label(title, systemImage: symbol)
-        .lineLimit(1)
-        .fixedSize(horizontal: true, vertical: false)
+      Image(systemName: symbol)
+        .font(.title3)
+        // Equal sides, so the glass platter is a circle rather than a flattened capsule.
+        .frame(width: controlDiameter, height: controlDiameter)
     }
     .buttonStyle(.glass)
+    .buttonBorderShape(.circle)
     .accessibilityLabel(title)
     .focused($focus, equals: .button(id))
+    .overlay(alignment: .top) {
+      Text(title)
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.white)
+        .lineLimit(1)
+        .fixedSize()
+        .offset(y: -32)
+        .opacity(focus == .button(id) ? 1 : 0)
+        // The name belongs to whichever button focus reaches; it must not trail behind the move.
+        .animation(nil, value: focus)
+    }
   }
 
   // MARK: Overlays
@@ -750,28 +789,15 @@ struct ProgrammeTimeline: View {
       .font(.caption2.monospacedDigit())
       .foregroundStyle(.white.opacity(0.7))
     }
-    .padding(.top, 26)
+    // Room above the track for the time bubble that appears while a skip is being previewed,
+    // so it never reaches into the row of buttons.
+    .padding(.top, 34)
     .animation(.easeOut(duration: 0.2), value: isFocused)
     .animation(.linear(duration: 0.4), value: pulse)
   }
 
   private func fraction(_ ms: Int, start: Int, duration: Int) -> CGFloat {
     CGFloat(min(1, max(0, Double(ms - start) / Double(duration))))
-  }
-}
-
-// MARK: - Control labels
-
-/// Title and symbol side by side, or the symbol alone when the row has to stay on one line.
-struct PlayerControlLabelStyle: LabelStyle {
-  let iconOnly: Bool
-
-  func makeBody(configuration: Configuration) -> some View {
-    if iconOnly {
-      configuration.icon
-    } else {
-      Label(configuration)
-    }
   }
 }
 
