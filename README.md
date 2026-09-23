@@ -132,8 +132,9 @@ horizontal spectrum line that cuts through them.
   from the shelves. Live television keeps one extra saturated cue: a small red dot.
 - **Aurora** – the atmosphere behind the black: luminous wave bands in teal, violet and deep
   blue. `AuroraGeometry` describes a band once; `AuroraWaves` draws it blurred into a single
-  layer and drifts it slowly behind every screen, artwork placeholders show a still of it varied
-  per channel, channel tiles carry a near-black tint from the same palettes, and the demo
+  layer, `DriftingAurora` slides that layer slowly behind every screen with a Core Animation
+  transform (so the motion runs in the render server, not on the main thread), artwork
+  placeholders show a still of it varied per channel, channel tiles carry a near-black tint from the same palettes, and the demo
   posters are rendered from the same maths in CoreGraphics. Focused artwork gets a soft teal
   halo, the one place the aurora's light touches the interface itself.
 - **Navigation** – the top-level sections live in the system sidebar (`TabView` with the
@@ -210,6 +211,15 @@ Key decisions:
   when their content is unchanged (`.equatable()`), the hero and the blurred backdrop follow
   focus only once it rests, artwork already in the memory cache paints on a card's first frame,
   and skeletons, glows and shadows exist only where they are visible.
+- The guide builds only the programme cells near the viewport. Every cell is a focusable button
+  with a context menu, and SwiftUI's per-update cost (attribute graph, layout, focus and gesture
+  responder walks) grows with the number of live cells, so a row materialises the hours on
+  screen plus an hour either side (`GuideScrollState.window`, moved in whole hours so rows
+  re-evaluate a couple of times per screen of scrolling) and one neighbour beyond that, so focus
+  can always step off the edge however long a programme is. The rest of the day is empty space
+  at the right offsets. Nothing in SwiftUI animates continuously: the aurora's drift is a Core
+  Animation transform, because a SwiftUI animation keeps the display link firing and the whole
+  screen redrawing on every frame for as long as it runs.
 - Remote model in the player: select shows controls · play/pause toggles · left/right skip ·
   down opens the schedule · up opens channels · Back cancels a skip, hides controls, then exits.
 - Back in the player is caught at the UIKit level (`BackInterceptingHost`), not only through
@@ -236,6 +246,11 @@ Large Text, pass a content size category through the test runner's environment:
 ```bash
 TEST_RUNNER_EON_TEXT_SIZE=UICTContentSizeCategoryAccessibilityL xcodebuild test -project EON_TV.xcodeproj -scheme EON_TV -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' -only-testing:EON_TVUITests/RemoteWalkthroughTests
 ```
+
+`GuidePerformanceTests` is for measuring rather than checking: `testGuideNavigationCPU`
+reports the app's CPU time for twenty presses around the guide (compare it before and after a
+change), `testGuideNavigationSweep` and `testGuideIdle` keep the guide busy or still for long
+enough to profile the app with `sample EON_TV 25` or Instruments attached to the simulator.
 
 The app itself accepts the same override for a quick look:
 `-UIPreferredContentSizeCategoryName UICTContentSizeCategoryAccessibilityXXXL` as a launch argument. `RealSessionPlaybackTests` drives
