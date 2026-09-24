@@ -1,4 +1,5 @@
 import Foundation
+import EONKit
 import Observation
 
 /// Central content state: the channel line-up, categories and the programme guide.

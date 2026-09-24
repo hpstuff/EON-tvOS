@@ -1,4 +1,5 @@
 import XCTest
+import EONKit
 @testable import EON_TV
 
 /// The guide builds cells only near the viewport. These pin down which hours of the day a scroll

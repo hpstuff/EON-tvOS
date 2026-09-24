@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 
 /// Account and device settings. Deliberately small: the platform exposes household details
 /// and sign-out; everything else here is local state the viewer may want to reset.

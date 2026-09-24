@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 
 /// Full-screen programme details with the channel's schedule for that day underneath, so a
 /// viewer can move straight from "what is this?" to "what else is on here?".

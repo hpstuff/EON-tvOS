@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 import Observation
 
 /// Scroll geometry shared with the channel column and the time ruler. Kept in its own

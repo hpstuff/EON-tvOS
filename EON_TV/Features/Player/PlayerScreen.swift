@@ -1,4 +1,5 @@
 import AVFoundation
+import EONKit
 import OSLog
 import SwiftUI
 

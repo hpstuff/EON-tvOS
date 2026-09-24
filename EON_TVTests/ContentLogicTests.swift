@@ -1,4 +1,5 @@
 import XCTest
+import EONKit
 @testable import EON_TV
 
 final class ContentLogicTests: XCTestCase {

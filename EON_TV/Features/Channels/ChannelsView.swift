@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 
 /// Channel browsing: a filter rail (all, favourites, categories) over a tile grid. Filters
 /// apply on click, so directional moves through the rail never change the grid unexpectedly.

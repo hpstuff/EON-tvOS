@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 
 /// Bottom sheet shared by the player panels: a dimmed backdrop, a title row and content. The
 /// content decides its own height, so cards that grow with the viewer's text size never clip.
