@@ -23,6 +23,11 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXBuildFile section */
+		CC0000000000000000000003 /* EONKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000000000000000000002 /* EONKit */; };
+		CC0000000000000000000005 /* EONKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000000000000000000004 /* EONKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		7120B1282E98422A00DCA24F /* EON_TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EON_TV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000002 /* EON_TVUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EON_TVUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -52,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CC0000000000000000000003 /* EONKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -66,6 +72,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CC0000000000000000000005 /* EONKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +119,7 @@
 			);
 			name = EON_TV;
 			packageProductDependencies = (
+				CC0000000000000000000002 /* EONKit */,
 			);
 			productName = "EON TV";
 			productReference = 7120B1282E98422A00DCA24F /* EON_TV.app */;
@@ -158,6 +166,7 @@
 			);
 			name = EON_TVTests;
 			packageProductDependencies = (
+				CC0000000000000000000004 /* EONKit */,
 			);
 			productName = EON_TVTests;
 			productReference = BB0000000000000000000002 /* EON_TVTests.xctest */;
@@ -196,6 +205,7 @@
 			mainGroup = 7120B11F2E98422A00DCA24F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				CC0000000000000000000001 /* XCRemoteSwiftPackageReference "EONKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7120B1292E98422A00DCA24F /* Products */;
@@ -614,6 +624,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CC0000000000000000000001 /* XCRemoteSwiftPackageReference "EONKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "git@github.com:hpstuff/EONKit.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CC0000000000000000000002 /* EONKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC0000000000000000000001 /* XCRemoteSwiftPackageReference "EONKit" */;
+			productName = EONKit;
+		};
+		CC0000000000000000000004 /* EONKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CC0000000000000000000001 /* XCRemoteSwiftPackageReference "EONKit" */;
+			productName = EONKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 7120B1202E98422A00DCA24F /* Project object */;
 }

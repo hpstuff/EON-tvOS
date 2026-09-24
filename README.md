@@ -1,7 +1,7 @@
 # EON TV for Apple TV
 
-A native tvOS Internet TV application built on the EON platform SDK that lives in
-`EON_TV/Core`, `EON_TV/Data` and `EON_TV/Domain`. Live channels, a remote-first programme
+A native tvOS Internet TV application built on the EON platform SDK, which ships as the
+private [EONKit](https://github.com/hpstuff/EONKit) Swift package. Live channels, a remote-first programme
 guide, catch-up and start-over playback, favourites and continue watching, all driven by the
 platform's live clock so the interface stays current without reloading screens.
 
@@ -43,26 +43,30 @@ scheme is what made this client possible. Thank you.
 ## Requirements
 
 - Xcode 26 or later (built and tested with the tvOS 27 SDK).
-- Deployment target tvOS 26.0. No third-party dependencies.
+- Deployment target tvOS 26.0. The only dependency is the private `EONKit` package, which
+  Xcode resolves over SSH (`git@github.com:hpstuff/EONKit.git`), so the GitHub account your
+  Xcode or git uses needs read access to that repository.
 - No signing team is committed. Pick your own team under **Signing & Capabilities** before you
   build on a device.
 - Client credentials are not committed. Copy `Secrets.example.swift` to
-  `EON_TV/Core/Secrets.swift` and fill in the four values before you build. That path is
+  `EON_TV/App/Secrets.swift` and fill in the four values before you build. That path is
   gitignored, and CI writes it from repository secrets.
 
 ## Credentials
 
 The app talks to the EON platform as one of EON's own OAuth clients, so it needs a client id
-and client secret for each. These are not in the repository. Provide them one of two ways.
+and client secret for each. These are not in the repository, and not in the SDK package either:
+`Backend` hands them to `EONSDK.configure(credentials:)` at launch. Provide them one of two ways.
 
 **Locally** – copy the template and fill it in:
 
 ```
-cp Secrets.example.swift EON_TV/Core/Secrets.swift
+cp Secrets.example.swift EON_TV/App/Secrets.swift
 ```
 
-**In CI** – set these four repository secrets under *Settings → Secrets and variables →
-Actions*, and the build workflow writes the file for you:
+**In CI** – set these repository secrets under *Settings → Secrets and variables →
+Actions*. The build workflow writes the file from the first four and uses the last one to
+fetch the private package:
 
 | Secret | Holds |
 | --- | --- |
@@ -70,6 +74,7 @@ Actions*, and the build workflow writes the file for you:
 | `EON_ANDROIDTV_CLIENT_SECRET` | Android TV client secret |
 | `EON_WEB_CLIENT_ID` | Web client id |
 | `EON_WEB_CLIENT_SECRET` | Web client secret |
+| `EONKIT_DEPLOY_KEY` | Private half of a read-only deploy key added to the `EONKit` repository |
 
 Note that a client secret shipped inside an app is not really secret: it is in the binary and
 can be read out of it. Keeping it out of the repository is hygiene, not protection. These
@@ -169,9 +174,10 @@ horizontal spectrum line that cuts through them.
 ## Architecture
 
 ```
+EONKit (private package) SDK: networking, interceptors, token and device stores, services,
+                         repositories and the platform models
 EON_TV/
-  Core, Data, Domain      SDK: networking, interceptors, token store, services, repositories
-  Domain/AppExtensions    Crash-safe accessors and capability checks over the SDK models
+  SDKExtensions/          Crash-safe accessors and capability checks over the SDK models
   App/                    Composition root (Backend), session lifecycle, root view, demo fixtures
   State/                  ContentStore (line-up + guide), LiveClock, favourites, history, images
   Design/                 Theme tokens, focus-aware button styles, badges, skeletons, artwork
@@ -266,7 +272,7 @@ and checks that the app keeps waiting while the code is unconfirmed.
 
 ## SDK changes
 
-Small fixes were made to the SDK sources:
+The SDK lives in the `EONKit` package. Small fixes were made to its sources:
 
 - `Schedule.hash(into:)` hashed nothing; it now combines id, start and end.
 - `StreamingRepositoryImpl` guards the hard-coded server index instead of crashing on a short list.

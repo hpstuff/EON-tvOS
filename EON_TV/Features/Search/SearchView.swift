@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 
 /// Client-side search across the channel line-up and every loaded guide day. Results are
 /// grouped by what the viewer can do with them: watch now, catch up, or look ahead.

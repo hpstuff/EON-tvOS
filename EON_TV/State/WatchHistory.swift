@@ -1,4 +1,5 @@
 import Foundation
+import EONKit
 import Observation
 
 /// What the viewer has been watching: recently tuned channels and catch-up positions.

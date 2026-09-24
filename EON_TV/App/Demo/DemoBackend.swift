@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import EONKit
 import UIKit
 
 /// A fixture-backed `Backend` used only in debug builds so the interface, focus behaviour and

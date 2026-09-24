@@ -1,4 +1,5 @@
 import XCTest
+import EONKit
 
 /// Drives the sign-in screen's code option against the real platform: the app registers this
 /// Apple TV, requests a one-time code and waits for it to be confirmed. No account is needed

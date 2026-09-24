@@ -12,6 +12,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The SDK is the private EONKit package, resolved over SSH. The deploy key has
+      # read access to that repository only.
+      - name: Grant access to the EONKit package
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EONKIT_DEPLOY_KEY }}
+
       # The app needs the EON client credentials at runtime, so CI writes the
       # untracked Secrets.swift from repository secrets before building.
       - name: Write Secrets.swift
@@ -21,7 +28,7 @@ jobs:
           EON_WEB_CLIENT_ID: ${{ secrets.EON_WEB_CLIENT_ID }}
           EON_WEB_CLIENT_SECRET: ${{ secrets.EON_WEB_CLIENT_SECRET }}
         run: |
-          cat > EON_TV/Core/Secrets.swift <<EOF
+          cat > EON_TV/App/Secrets.swift <<EOF
           enum Secrets {
             static let androidTVClientID = "${EON_ANDROIDTV_CLIENT_ID}"
             static let androidTVClientSecret = "${EON_ANDROIDTV_CLIENT_SECRET}"
@@ -36,5 +43,6 @@ jobs:
             -project EON_TV.xcodeproj \
             -scheme EON_TV \
             -destination 'generic/platform=tvOS Simulator' \
+            -scmProvider system \
             CODE_SIGNING_ALLOWED=NO \
             | xcpretty || exit ${PIPESTATUS[0]}

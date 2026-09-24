@@ -1,4 +1,5 @@
 import Foundation
+import EONKit
 
 // App-level conveniences over the SDK's `Channel`. These never change the SDK's
 // behaviour; they only add crash-safe accessors and capability checks the UI needs.
@@ -54,16 +55,4 @@ extension Channel {
     let earliestMs = Double(nowMs) - catchUpWindow * 1000
     return Double(schedule.startTime) >= earliestMs
   }
-}
-
-extension Channel: Equatable, Hashable {
-  public static func == (lhs: Channel, rhs: Channel) -> Bool { lhs.id == rhs.id }
-  public func hash(into hasher: inout Hasher) { hasher.combine(id) }
-}
-
-extension ChannelCategory: Equatable, Hashable {
-  public static func == (lhs: ChannelCategory, rhs: ChannelCategory) -> Bool {
-    lhs.id == rhs.id && lhs.channels.map(\.id) == rhs.channels.map(\.id)
-  }
-  public func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
