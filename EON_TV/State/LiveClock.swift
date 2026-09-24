@@ -1,4 +1,5 @@
 import Foundation
+import EONKit
 import Observation
 
 /// The app's single notion of "now", derived from the server-synchronised clock.

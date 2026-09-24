@@ -1,4 +1,5 @@
 import Foundation
+import EONKit
 import Observation
 
 /// Locally kept favourite channels. The platform has no favourites API, so this lives on

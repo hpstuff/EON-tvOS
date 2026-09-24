@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 
 /// Home: a hero that follows the focused card, then shelves derived from the live guide.
 /// Everything here is keyed by stable channel/programme ids so clock ticks and guide loads

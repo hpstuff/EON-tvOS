@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 
 /// The signed-in shell: the system sidebar (`.sidebarAdaptable`) carries the top-level sections
 /// and floats over edge-to-edge content as Liquid Glass, collapsing to a slim indicator while

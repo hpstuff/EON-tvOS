@@ -1,4 +1,5 @@
 import Foundation
+import EONKit
 
 /// Everything the UI needs from the platform, assembled once per process from the SDK's
 /// repositories. The app never talks to services directly; it goes through this seam.
@@ -23,6 +24,13 @@ enum BackendFactory {
   private static let baseURLKey = "eon.platform.baseURL"
 
   static func makeLive() async throws -> Backend {
+    EONSDK.configure(credentials: ClientCredentials(
+      androidTVClientID: Secrets.androidTVClientID,
+      androidTVClientSecret: Secrets.androidTVClientSecret,
+      webClientID: Secrets.webClientID,
+      webClientSecret: Secrets.webClientSecret
+    ))
+
     // The SDK's cache interceptor captures `URLCache.shared`, so size it before building the chain.
     URLCache.shared = URLCache(
       memoryCapacity: 24 * 1024 * 1024,
@@ -67,7 +75,11 @@ enum BackendFactory {
       syncClock: { _ = try await streamingService.getTime() },
       // Tokens are only usable together with the device they were issued to; a session from
       // before device registration existed is treated as signed out.
-      hasStoredSession: { await tokenStore.getAccessToken() != nil && deviceStore.registration() != nil },
+      hasStoredSession: {
+        let token = await tokenStore.getAccessToken()
+        let registration = await deviceStore.registration()
+        return token != nil && registration != nil
+      },
       // Forget the registration too, but never the serial: the next sign-in registers again
       // and gets the same device back unless the provider removed it, which is exactly the
       // recovery the platform expects after a device is deleted in the portal.

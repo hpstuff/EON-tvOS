@@ -1,4 +1,5 @@
 import Foundation
+import EONKit
 import Observation
 
 /// Owns the process-wide lifecycle: platform bootstrap, authentication state and the stores

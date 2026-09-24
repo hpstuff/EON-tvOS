@@ -1,4 +1,5 @@
 import XCTest
+import EONKit
 
 /// Drives the app with the Siri Remote the way a viewer would and captures a screenshot after
 /// every step. Runs against the demo backend so it needs no subscriber account.

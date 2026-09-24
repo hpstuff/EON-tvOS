@@ -1,4 +1,5 @@
 import Foundation
+import EONKit
 
 // App-level conveniences over the SDK's `Schedule` (an EPG programme). Times in the SDK are
 // epoch milliseconds; everything here keeps that unit and converts only for display.

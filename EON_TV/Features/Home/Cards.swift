@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 
 /// Programme + channel card used on every shelf. The artwork carries the channel logo, the
 /// live badge or start time and airing progress; the text below brightens with focus. The card

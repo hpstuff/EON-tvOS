@@ -1,4 +1,5 @@
 import Foundation
+import EONKit
 import Observation
 
 /// What the viewer asked to watch. Carries the surrounding line-up so the player can flip
