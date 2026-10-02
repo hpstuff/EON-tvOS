@@ -192,7 +192,7 @@ struct ProgramDetailView: View {
           if entry.schedule.id == schedule.id { return }
           coordinator.detail = entry
         } label: {
-          ProgramCard(channel: channel, schedule: entry.schedule, width: 340, showsChannelName: false)
+          ProgramCard(channel: channel, schedule: entry.schedule, width: 340, showsChannelName: false, showsDescription: true)
         }
         .buttonStyle(.bare)
         .focused($focus, equals: .program(entry.schedule.id))

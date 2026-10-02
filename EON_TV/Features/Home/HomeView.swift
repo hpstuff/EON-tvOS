@@ -555,8 +555,9 @@ struct HomeSkeleton: View {
                 VStack(alignment: .leading, spacing: 14) {
                   SkeletonBlock(cornerRadius: Theme.cardRadius)
                     .frame(width: Theme.programCardWidth, height: Theme.programCardWidth * 9 / 16)
+                  SkeletonBlock(cornerRadius: 5).frame(width: 120, height: 16)
                   SkeletonBlock(cornerRadius: 6).frame(width: 260, height: 24)
-                  SkeletonBlock(cornerRadius: 6).frame(width: 180, height: 20)
+                  SkeletonBlock(cornerRadius: 6).frame(width: 200, height: 20)
                 }
               }
             }

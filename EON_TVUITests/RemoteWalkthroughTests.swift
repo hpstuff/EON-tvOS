@@ -134,24 +134,25 @@ final class RemoteWalkthroughTests: XCTestCase {
     press(.menu); wait(3); snap("transport-12-after-menu-3")
   }
 
-  /// The panels are reachable only from the round buttons above the timeline: up from the
-  /// hidden player shows the controls, up again enters the row on Start Over, and right walks
-  /// it from there — Schedule, Channels, Audio & Subtitles.
+  /// The shelves open from the pills beneath the timeline and the track popovers from the round
+  /// buttons above it: up from the hidden player shows the controls on the timeline, down enters
+  /// the pill row on Schedule, and up from the timeline enters the round buttons on Subtitles.
   func testPlayerPanels() {
     press(.select); wait(9); snap("panels-01-playing")
     press(.up); wait(2); snap("panels-02-controls")
-    press(.up); wait(1); snap("panels-03-button-row")
-    press(.right); wait(1); snap("panels-04-schedule-button")
-    press(.select); wait(2); snap("panels-05-schedule-panel")
-    press(.right); wait(1); snap("panels-06-schedule-right")
-    press(.menu); wait(1); snap("panels-07-back-to-controls")
-    press(.up); wait(1); press(.right, times: 2); wait(1); snap("panels-08-channels-button")
-    press(.select); wait(2); snap("panels-09-channels-panel")
-    press(.right); press(.select); wait(8); snap("panels-10-switched-channel")
-    press(.up); wait(1); press(.up); wait(1); press(.right, times: 3); wait(1); snap("panels-11-options-button")
-    press(.select); wait(2); snap("panels-12-options-panel")
-    press(.down); press(.select); wait(2); snap("panels-13-subtitle-selected")
-    press(.menu); wait(1); press(.menu); wait(1); press(.menu); wait(2); snap("panels-14-home")
+    press(.down); wait(1); snap("panels-03-pill-row")
+    press(.select); wait(2); snap("panels-04-schedule-shelf")
+    press(.right); wait(1); snap("panels-05-schedule-right")
+    press(.menu); wait(1); snap("panels-06-back-to-controls")
+    press(.down); wait(1); press(.right); wait(1); snap("panels-07-channels-pill")
+    press(.select); wait(2); snap("panels-08-channels-shelf")
+    press(.right); press(.select); wait(8); snap("panels-09-switched-channel")
+    press(.up); wait(1); press(.up); wait(1); snap("panels-10-subtitles-button")
+    press(.select); wait(2); snap("panels-11-subtitles-popover")
+    press(.down); press(.select); wait(2); snap("panels-12-subtitle-selected")
+    press(.menu); wait(1); snap("panels-13-popover-closed")
+    press(.up); wait(1); press(.right); wait(1); press(.select); wait(2); snap("panels-14-audio-popover")
+    press(.menu); wait(1); press(.menu); wait(1); press(.menu); wait(2); snap("panels-15-home")
   }
 
   /// Skipping forward inside a finished programme must keep showing that programme, and a

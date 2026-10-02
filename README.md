@@ -113,11 +113,12 @@ launch with the `-demo` argument. Demo playback uses Apple's public HLS sample s
   timeline is programme-based (position inside the current programme, the live edge, a ghost
   marker while skipping) and every move is a fresh timeshift request at a wall-clock instant.
   Skip back/forward in fixed 15-second steps or slide across the touchpad to scrub (one full
-  slide covers a fifth of the programme; commit after a short pause or with select), pause and
-  resume exactly where you paused, and a row of round buttons above the timeline — Start Over
-  and Go Live, a Schedule panel to jump to earlier programmes, a Channels panel to switch, an
-  Audio & Subtitles panel — plus retry on failure and Back that hides controls first and then
-  leaves.
+  slide covers a fifth of the programme; commit after a short pause or with select), and pause
+  and resume exactly where you paused. The transport bar is laid out as in the system player:
+  the title in bold under a line of channel facts, round Subtitles and Audio buttons to the
+  right that open glass popovers, a thin timeline, and Schedule, Channels and Start Over or Go
+  Live as glass pills beneath it — plus retry on failure and Back that hides controls first and
+  then leaves.
 - **Settings** – household details, refresh, clearing local data and sign-out.
 
 ## Design
@@ -125,8 +126,11 @@ launch with the `-demo` argument. Demo playback uses Apple's public HLS sample s
 The look comes from the EON mark: a black canvas, thin white geometric letterforms and one
 horizontal spectrum line that cuts through them.
 
-- **Canvas** – pure black, with only a faint blurred trace of the featured artwork behind a
-  screen. Surfaces are near-black greys with hairline strokes; there is no tinted accent.
+- **Canvas** – a heavily blurred, darkened wash of the featured artwork fills the whole screen
+  behind every section, the way the TV app colours its show pages: brighter towards the top,
+  deep shadow at the foot, never flat black. The aurora drifts beneath it and carries screens
+  that have no artwork of their own. Surfaces are glass or near-black greys with hairline
+  strokes; there is no tinted accent.
 - **Type** – the tvOS text styles (title2 for the hero, title3 for screen titles, callout for
   shelf titles, caption and caption2 for card copy), so every label follows the viewer's Text
   Size setting, which tvOS 27 made system-wide. Regular weight for display text, medium only
@@ -154,6 +158,18 @@ horizontal spectrum line that cuts through them.
   treatment built on the standard focus APIs: artwork cards scale and glow, guide cells turn into
   a white platter. Selection at rest (a chip's filter, the sign-in method) is heavier type with a
   short run of the spectrum, never colour.
+- **Glass** – everything else that floats above content is Liquid Glass too, drawn with
+  `glassEffect`: `glassPill` for the live badge, tags and the channel logo on artwork (tinted
+  white for the rare emphasised tag); `glassPanel` for the sign-in form, the settings account
+  card, the player's loading card and its track popovers; and `CardCaption` under every
+  programme card and channel tile. Cards follow the TV app's episode cards: the artwork carries
+  only the channel logo, the live badge or start time and an airing programme's progress, and
+  the words — a small channel kicker, the title, the time and what's left, the description where
+  a shelf has room — sit beneath it on the canvas, settling onto a glass panel when the card has
+  focus while the artwork lifts behind a thin bright rim with a shadow and the teal halo. In the
+  guide the time ruler is a glass bar the rows scroll beneath and the channel column's cells are
+  glass at rest; empty and error states put their symbol on a glass disc. The packed programme
+  cells stay opaque, and the player's schedule and channel shelves run edge to edge.
 - **Text size** – layouts adapt rather than truncate. Artwork grows with its caption up to 1.6×,
   the channel grid drops columns as tiles widen, the guide's rows, column and hour width scale
   together, and at accessibility sizes the hero, details, sign-in and settings screens stack

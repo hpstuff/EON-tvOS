@@ -28,11 +28,13 @@ struct PlayerScreen: View {
 /// - Controls hidden: select or up shows the controls · play/pause toggles · left/right skip a
 ///   fixed step (preview, then commit) · a touchpad slide scrubs · Back leaves the player.
 /// - Controls visible: the timeline has focus; left/right skip, a slide scrubs, up reaches the
-///   round buttons above it, Back cancels a pending skip, then hides the controls.
-/// - The schedule, the channel list and the track options open only from their buttons, the way
-///   the system player keeps its panels behind the round controls rather than behind a swipe.
-///   Nothing else lives in that row: play/pause is the remote's own key and a press on the
-///   timeline, and a channel is favourited from the channel list, not from playback.
+///   round track buttons above it and down the pills beneath it, Back cancels a pending skip,
+///   then hides the controls.
+/// - The schedule and the channel list open as shelves from the pills, and subtitles and audio
+///   as popovers from the round buttons: the system player's own arrangement of its transport
+///   bar. There is no play/pause button, as there is none in the system player: that is the
+///   remote's own key and a press on the timeline, and a channel is favourited from the channel
+///   list, not from playback.
 struct PlayerScreenContent: View {
   let request: PlaybackRequest
   let back: BackRelay
@@ -63,11 +65,15 @@ struct PlayerScreenContent: View {
   @FocusState private var focus: PlayerFocus?
 
   enum Panel: Equatable {
-    case none, schedule, channels, options
+    case none, schedule, channels, subtitles, audio
+
+    /// The track popovers float above the controls and leave them in place; the shelves
+    /// replace them.
+    var isPopover: Bool { self == .subtitles || self == .audio }
   }
 
   enum ControlButton: Hashable {
-    case timeshift, schedule, channels, options
+    case schedule, channels, timeshift, subtitles, audio
   }
 
   enum PlayerFocus: Hashable {
@@ -76,6 +82,11 @@ struct PlayerScreenContent: View {
     case button(ControlButton)
     case failureRetry, failureLive, failureClose
     case panelItem(String)
+
+    var isPanelItem: Bool {
+      if case .panelItem = self { return true }
+      return false
+    }
   }
 
   private static let hideDelay: Duration = .seconds(7)
@@ -103,8 +114,8 @@ struct PlayerScreenContent: View {
           }
         } else {
           switch panel {
-          case .none:
-            if controlsVisible {
+          case .none, .subtitles, .audio:
+            if controlsVisible || panel.isPopover {
               controls(controller)
             } else {
               hiddenSurface(controller)
@@ -113,8 +124,6 @@ struct PlayerScreenContent: View {
             SchedulePanel(controller: controller, focus: $focus, onClose: closePanel)
           case .channels:
             ChannelsPanel(controller: controller, focus: $focus, onClose: closePanel)
-          case .options:
-            MediaOptionsPanel(controller: controller, focus: $focus, onClose: closePanel)
           }
           noticeOverlay(controller)
         }
@@ -133,6 +142,10 @@ struct PlayerScreenContent: View {
       AppLog.player.notice("focus=\(String(describing: newValue), privacy: .public) controls=\(controlsVisible) panel=\(String(describing: panel), privacy: .public)")
       scheduleAutoHide()
       if newValue == nil { reseatFocus() }
+      // A track popover is a menu: once focus moves out of it, it closes behind the viewer.
+      if panel.isPopover, let newValue, !newValue.isPanelItem {
+        withAnimation(.easeIn(duration: 0.2)) { panel = .none }
+      }
     }
     .onChange(of: controller?.isPaused ?? false) { _, paused in
       if paused { showControls(focusTimeline: false) } else { scheduleAutoHide() }
@@ -175,7 +188,7 @@ struct PlayerScreenContent: View {
     .defaultFocus($focus, .surface)
     .onAppear { focus = .surface }
     // Every direction brings the controls up, the way the system player answers any move with
-    // its transport bar. The panels are behind the round buttons, never behind a bare swipe.
+    // its transport bar. The shelves and popovers are behind the buttons, never behind a swipe.
     .onMoveCommand { direction in
       switch direction {
       case .left: showControls(focusTimeline: true); nudge(-1, controller)
@@ -188,6 +201,9 @@ struct PlayerScreenContent: View {
 
   // MARK: Controls
 
+  /// The transport bar, in the shape of the system player's: what is playing on the left under
+  /// a line of channel facts, the track buttons on the right, the timeline across, and a row of
+  /// pills beneath it for the schedule, the channel list and the timeshift action.
   private func controls(_ controller: PlayerController) -> some View {
     let now = clock.nowMs
     let playhead = controller.playheadMs ?? now
@@ -209,51 +225,51 @@ struct PlayerScreenContent: View {
 
       Spacer()
 
-      VStack(alignment: .leading, spacing: 18) {
-        // What is playing on the left, the round buttons on the right, both sitting on the
-        // timeline — the arrangement the system player uses.
+      VStack(alignment: .leading, spacing: 14) {
         HStack(alignment: .bottom, spacing: 40) {
-          VStack(alignment: .leading, spacing: 14) {
+          VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 14) {
-              ChannelLogo(channel: controller.channel, height: 40, platter: false)
+              ChannelLogo(channel: controller.channel, height: 36, platter: false)
               Text(controller.channel.name)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white.opacity(0.9))
               Text("· Channel \(store.channelNumber(controller.channel))")
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.55))
+              if let programme {
+                Text("· \(programme.timeRangeText)")
+                  .font(.caption)
+                  .foregroundStyle(.white.opacity(0.55))
+              }
               statusBadge(controller, displayedMs: displayedMs, now: now)
             }
+            .lineLimit(1)
 
             Text(programme?.title ?? controller.channel.name)
-              .font(.title3.weight(.regular))
+              .font(.title2.weight(.bold))
               .foregroundStyle(.white)
               .lineLimit(1)
-
-            if let programme {
-              HStack(spacing: 14) {
-                Text(programme.timeRangeText)
-                  .font(.caption)
-                  .foregroundStyle(.white.opacity(0.7))
-                if let subtitle = programme.subtitleText {
-                  Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
-                    .lineLimit(1)
-                }
-              }
-            }
           }
 
           Spacer(minLength: 20)
 
-          buttons(controller)
+          // The open button's popover sits above the row, trailing-aligned with it, as part of
+          // the layout: the block grows upward over the picture while the popover is open.
+          VStack(alignment: .trailing, spacing: 0) {
+            if panel.isPopover {
+              popover(controller)
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottomTrailing)))
+            }
+            trackButtons(controller)
+          }
         }
 
         timeline(controller, programme: programme, playheadMs: playhead, now: now)
+
+        pills(controller)
       }
       .padding(.horizontal, Theme.screenMargin)
-      .padding(.bottom, 56)
+      .padding(.bottom, 48)
       .padding(.top, 120)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background {
@@ -307,14 +323,15 @@ struct PlayerScreenContent: View {
         previewMs: previewMs,
         nowMs: now,
         isLive: controller.isLive,
+        isPaused: controller.isPaused,
         pulse: controller.timelinePulse
       )
     }
     .buttonStyle(.bare)
     .focused($focus, equals: .timeline)
-    // Up is left to the focus engine: the button row above names its own entry point, so moving
-    // focus there is a single hop. Assigning focus here as well would make the engine's own pick
-    // flash first.
+    // Up and down are left to the focus engine: the rows above and below name their own entry
+    // points, so moving focus there is a single hop. Assigning focus here as well would make
+    // the engine's own pick flash first.
     .onMoveCommand { direction in
       switch direction {
       case .left: nudge(-1, controller)
@@ -327,37 +344,64 @@ struct PlayerScreenContent: View {
 
   // MARK: Buttons
 
-  /// Round icon buttons above the timeline, right-aligned. The row keeps a stable set of
-  /// identities: Start Over and Go Live share one button, and the options button is always
-  /// present, so a press never removes the control that has focus.
-  ///
-  /// There is no play/pause button, as there is none in the system player: the remote's own
-  /// play/pause key toggles playback wherever focus is, and so does a press on the timeline.
-  ///
-  /// The symbols carry the meaning, as they do in the system player; the name of the focused
-  /// button appears right above it, drawn as an overlay so naming it moves nothing.
-  private func buttons(_ controller: PlayerController) -> some View {
+  /// The round buttons above the timeline, right-aligned as in the system player: subtitles and
+  /// audio, each opening its own popover. Both are always present, so a press never removes the
+  /// control that has focus. The symbols carry the meaning, as they do in the system player; the
+  /// name of the focused button appears right above it, drawn as an overlay so naming it moves
+  /// nothing.
+  private func trackButtons(_ controller: PlayerController) -> some View {
     HStack(spacing: 18) {
-      if let timeshift = timeshiftAction(controller) {
-        controlButton(.timeshift, controller, symbol: timeshift.symbol, action: timeshift.action)
-      }
-      controlButton(.schedule, controller, symbol: "list.bullet.rectangle") {
-        openPanel(.schedule)
-      }
-      controlButton(.channels, controller, symbol: "tv") {
-        openPanel(.channels)
-      }
-      controlButton(.options, controller, symbol: "captions.bubble") {
-        openPanel(.options)
-      }
+      roundButton(.subtitles, controller, symbol: "captions.bubble") { openPanel(.subtitles) }
+      roundButton(.audio, controller, symbol: "waveform") { openPanel(.audio) }
     }
     // Room for the name of the focused button, which the overlay draws above its circle.
     .padding(.top, 40)
-    // The row is one focus region entered on its first button, whichever that is on this
-    // channel. With `.userInitiated` priority the engine honours it when the viewer moves up
-    // from the timeline, instead of landing on whichever button sits nearest the playhead.
+    // One focus region entered on its first button. With `.userInitiated` priority the engine
+    // honours it when the viewer moves up from the timeline.
     .focusSection()
-    .defaultFocus($focus, .button(timeshiftAction(controller) == nil ? .schedule : .timeshift), priority: .userInitiated)
+    .defaultFocus($focus, .button(.subtitles), priority: .userInitiated)
+  }
+
+  /// Glass text pills beneath the timeline, where the system player keeps Info and Chapters:
+  /// the schedule, the channel list and, when the channel offers it, Start Over or Go Live.
+  private func pills(_ controller: PlayerController) -> some View {
+    HStack(spacing: 14) {
+      pill(.schedule, controller) { openPanel(.schedule) }
+      pill(.channels, controller) { openPanel(.channels) }
+      if let timeshift = timeshiftAction(controller) {
+        pill(.timeshift, controller, action: timeshift.action)
+      }
+    }
+    .padding(.top, 4)
+    .focusSection()
+    .defaultFocus($focus, .button(.schedule), priority: .userInitiated)
+  }
+
+  /// The track list for the open button.
+  @ViewBuilder
+  private func popover(_ controller: PlayerController) -> some View {
+    switch panel {
+    case .subtitles:
+      MediaOptionsPopover(
+        title: "Subtitles",
+        options: controller.subtitleOptions,
+        emptyMessage: "This stream has no subtitles",
+        onSelect: { controller.select($0, in: controller.subtitleOptions) },
+        onClose: closePanel,
+        focus: $focus
+      )
+    case .audio:
+      MediaOptionsPopover(
+        title: "Audio Track",
+        options: controller.audioOptions,
+        emptyMessage: "This stream has a single audio track",
+        onSelect: { controller.select($0, in: controller.audioOptions) },
+        onClose: closePanel,
+        focus: $focus
+      )
+    default:
+      EmptyView()
+    }
   }
 
   /// One view identity for both timeshift states so focus survives switching between them.
@@ -369,18 +413,19 @@ struct PlayerScreenContent: View {
     return ("Go Live", "dot.radiowaves.left.and.right", { controller.goLive() })
   }
 
-  /// The one place a button's name is written: the caption shown above it while it holds focus,
-  /// and what VoiceOver reads for the icon.
+  /// The one place a button's name is written: the pill's label, the caption shown above a
+  /// round button while it holds focus, and what VoiceOver reads for its icon.
   private func buttonTitle(_ id: ControlButton, _ controller: PlayerController) -> String {
     switch id {
     case .timeshift: return timeshiftAction(controller)?.title ?? ""
     case .schedule: return "Schedule"
     case .channels: return "Channels"
-    case .options: return "Audio & Subtitles"
+    case .subtitles: return "Subtitles"
+    case .audio: return "Audio"
     }
   }
 
-  private func controlButton(_ id: ControlButton, _ controller: PlayerController, symbol: String, action: @escaping () -> Void) -> some View {
+  private func roundButton(_ id: ControlButton, _ controller: PlayerController, symbol: String, action: @escaping () -> Void) -> some View {
     let title = buttonTitle(id, controller)
     return Button {
       action()
@@ -408,6 +453,17 @@ struct PlayerScreenContent: View {
     }
   }
 
+  private func pill(_ id: ControlButton, _ controller: PlayerController, action: @escaping () -> Void) -> some View {
+    Button {
+      action()
+      scheduleAutoHide()
+    } label: {
+      Text(buttonTitle(id, controller))
+    }
+    .buttonStyle(.glass)
+    .focused($focus, equals: .button(id))
+  }
+
   // MARK: Overlays
 
   @ViewBuilder
@@ -430,6 +486,9 @@ struct PlayerScreenContent: View {
             .frame(width: 360)
             .padding(.top, 8)
         }
+        .padding(.horizontal, 96)
+        .padding(.vertical, 60)
+        .glassPanel()
       }
       .ignoresSafeArea()
       .transition(.opacity)
@@ -558,14 +617,14 @@ struct PlayerScreenContent: View {
       switch panel {
       case .none:
         focus = controlsVisible ? .timeline : .surface
-      case .schedule, .channels, .options:
+      case .schedule, .channels, .subtitles, .audio:
         break
       }
     }
   }
 
   private func handlePlayPause() {
-    guard let controller, !controller.hasFailed, panel == .none else { return }
+    guard let controller, !controller.hasFailed, panel == .none || panel.isPopover else { return }
     if previewMs != nil {
       commitPreview(controller)
     } else {
@@ -605,11 +664,12 @@ struct PlayerScreenContent: View {
     }
   }
 
+  /// The shelves take the controls' place; the popovers open above them and leave them up.
   private func openPanel(_ target: Panel) {
     hideTask?.cancel()
     cancelPreview()
     withAnimation(.easeOut(duration: 0.25)) {
-      controlsVisible = false
+      if !target.isPopover { controlsVisible = false }
       panel = target
     }
   }
@@ -699,14 +759,17 @@ struct PlayerScreenContent: View {
 
 // MARK: - Timeline
 
-/// Programme-relative timeline: progress inside the programme, the live edge, and a ghost
-/// marker while a skip is being previewed.
+/// Programme-relative timeline in the system player's shape: a thin track that fills to the
+/// playhead, the live edge marked when the viewer is behind it, a ghost position while a skip
+/// is being previewed, and the times beneath — where the viewer is on the left, with a pause
+/// glyph while paused, and the programme's end on the right.
 struct ProgrammeTimeline: View {
   let programme: Schedule?
   let playheadMs: Int
   let previewMs: Int?
   let nowMs: Int
   let isLive: Bool
+  let isPaused: Bool
   let pulse: Int
 
   @Environment(\.isFocused) private var isFocused
@@ -718,29 +781,32 @@ struct ProgrammeTimeline: View {
     let playFraction = fraction(playheadMs, start: start, duration: duration)
     let liveFraction = fraction(nowMs, start: start, duration: duration)
     let previewFraction = previewMs.map { fraction($0, start: start, duration: duration) }
+    let shownFraction = previewFraction ?? playFraction
+    let behindLive = !isLive && nowMs > start && nowMs < end
+    let trackHeight: CGFloat = isFocused ? 10 : 6
 
-    VStack(spacing: 10) {
+    VStack(spacing: 12) {
       GeometryReader { proxy in
         let width = proxy.size.width
         ZStack(alignment: .leading) {
           Capsule()
-            .fill(Color.white.opacity(0.18))
-            .frame(height: isFocused ? 12 : 8)
+            .fill(Color.white.opacity(0.22))
+            .frame(height: trackHeight)
 
-          if !isLive, nowMs > start, nowMs < end {
+          if behindLive {
             Capsule()
-              .fill(Color.white.opacity(0.10))
-              .frame(width: width * liveFraction, height: isFocused ? 12 : 8)
+              .fill(Color.white.opacity(0.12))
+              .frame(width: width * liveFraction, height: trackHeight)
           }
 
           Capsule()
             .fill(Theme.spectrum)
-            .frame(width: width, height: isFocused ? 12 : 8)
+            .frame(width: width, height: trackHeight)
             .mask(alignment: .leading) {
-              Capsule().frame(width: max(6, width * (previewFraction ?? playFraction)))
+              Capsule().frame(width: max(trackHeight, width * shownFraction))
             }
 
-          if !isLive, nowMs > start, nowMs < end {
+          if behindLive {
             VStack(spacing: 3) {
               Text("LIVE")
                 .font(.caption2.weight(.semibold))
@@ -756,11 +822,12 @@ struct ProgrammeTimeline: View {
             .position(x: width * liveFraction, y: proxy.size.height / 2 - 14)
           }
 
-          Circle()
+          // The playhead: a slim white mark at the end of the fill, as the system player draws it.
+          RoundedRectangle(cornerRadius: 2, style: .continuous)
             .fill(.white)
-            .frame(width: isFocused ? 26 : 18, height: isFocused ? 26 : 18)
-            .shadow(color: .black.opacity(0.5), radius: 6)
-            .position(x: width * (previewFraction ?? playFraction), y: proxy.size.height / 2)
+            .frame(width: 4, height: trackHeight + 10)
+            .shadow(color: .black.opacity(0.5), radius: 4)
+            .position(x: width * shownFraction, y: proxy.size.height / 2)
 
           if let previewFraction, let previewMs {
             Text(previewMs.dateFromMs.shortTime)
@@ -776,18 +843,20 @@ struct ProgrammeTimeline: View {
       }
       .frame(height: 30)
 
-      HStack {
-        Text(start.dateFromMs.shortTime)
-        Spacer()
-        if previewMs == nil {
-          Text(playheadMs.dateFromMs.shortTime)
-            .foregroundStyle(.white.opacity(isFocused ? 1 : 0.7))
+      HStack(alignment: .firstTextBaseline) {
+        HStack(spacing: 10) {
+          Text((previewMs ?? playheadMs).dateFromMs.shortTime)
+            .foregroundStyle(.white.opacity(isFocused ? 1 : 0.8))
+          if isPaused {
+            Image(systemName: "pause.circle")
+              .foregroundStyle(.white.opacity(0.8))
+          }
         }
         Spacer()
         Text(end.dateFromMs.shortTime)
+          .foregroundStyle(.white.opacity(0.7))
       }
-      .font(.caption2.monospacedDigit())
-      .foregroundStyle(.white.opacity(0.7))
+      .font(.caption2.weight(.semibold).monospacedDigit())
     }
     // Room above the track for the time bubble that appears while a skip is being previewed,
     // so it never reaches into the row of buttons.

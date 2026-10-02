@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// Design tokens for EON TV, drawn from the mark: a black canvas, white type, and one spectrum
-/// line that carries every accent. Every screen draws from this one vocabulary so the product
-/// reads as a single system rather than a set of API screens.
+/// Design tokens for EON TV, drawn from the mark: a deep, artwork-washed canvas, white type, and
+/// one spectrum line that carries every accent. Every screen draws from this one vocabulary so
+/// the product reads as a single system rather than a set of API screens.
 ///
 /// Controls follow the platform: buttons, chips and fields use the system's Liquid Glass styles so
-/// focus looks and moves the way it does everywhere else on tvOS, and text uses the platform text
-/// styles so it follows the viewer's Text Size setting (system-wide on tvOS 27).
+/// focus looks and moves the way it does everywhere else on tvOS; panels, sheets, badges and the
+/// guide's ruler are glass as well (`glassPanel`, `glassPill` in Components). Text uses the
+/// platform text styles so it follows the viewer's Text Size setting (system-wide on tvOS 27).
 enum Theme {
   // MARK: Colour
 
@@ -44,8 +45,10 @@ enum Theme {
 
   static var accentGradient: LinearGradient { spectrum }
 
+  /// The canvas under every screen: a deep grey rather than black, the way the TV app's show
+  /// pages sit on a dark wash, so the blurred artwork laid over it has something to lift from.
   static var backgroundGradient: LinearGradient {
-    LinearGradient(colors: [.black, Color(white: 0.035)], startPoint: .top, endPoint: .bottom)
+    LinearGradient(colors: [Color(white: 0.17), Color(white: 0.12)], startPoint: .top, endPoint: .bottom)
   }
 
   static var spectrumGradient: Gradient { gradient(BrandGeometry.spectrum) }
@@ -98,8 +101,10 @@ extension Font {
   static let heroBody = Font.body.weight(.regular)
   static let screenTitle = Font.title3.weight(.regular)
   static let sectionTitle = Font.callout
-  static let cardTitle = Font.caption
+  static let cardTitle = Font.caption.weight(.semibold)
   static let cardMeta = Font.caption2.weight(.regular)
+  /// The small uppercase line above a card's title, naming its channel.
+  static let cardKicker = Font.caption2.weight(.semibold)
   static let badge = Font.caption2.weight(.semibold)
   static let guideCell = Font.caption
   static let guideRuler = Font.caption2

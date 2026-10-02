@@ -1,8 +1,9 @@
 import SwiftUI
 import EONKit
 
-/// Bottom sheet shared by the player panels: a dimmed backdrop, a title row and content. The
-/// content decides its own height, so cards that grow with the viewer's text size never clip.
+/// Bottom shelf shared by the schedule and channel panels: a title row and a row of glass cards
+/// over the dimmed picture, running edge to edge. The content decides its own height, so cards
+/// that grow with the viewer's text size never clip.
 private struct PlayerSheet<Content: View>: View {
   let title: String
   let subtitle: String?
@@ -34,19 +35,18 @@ private struct PlayerSheet<Content: View>: View {
       .padding(.top, 34)
       .padding(.bottom, 44)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background {
-        LinearGradient(
-          stops: [
-            .init(color: .clear, location: 0),
-            .init(color: .black.opacity(0.7), location: 0.12),
-            .init(color: .black.opacity(0.92), location: 1),
-          ],
-          startPoint: .top,
-          endPoint: .bottom
-        )
-        .padding(.top, -120)
-        .ignoresSafeArea()
-      }
+    }
+    .background {
+      LinearGradient(
+        stops: [
+          .init(color: .clear, location: 0),
+          .init(color: .black.opacity(0.7), location: 0.4),
+          .init(color: .black.opacity(0.9), location: 1),
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+      )
+      .ignoresSafeArea()
     }
     .transition(.move(edge: .bottom).combined(with: .opacity))
   }
@@ -99,8 +99,7 @@ struct SchedulePanel: View {
                   controller.play(schedule)
                   onClose()
                 } label: {
-                  ProgramCard(channel: channel, schedule: schedule, width: 320, showsChannelName: false)
-                    .opacity(playable ? 1 : 0.45)
+                  ProgramCard(channel: channel, schedule: schedule, width: 320, showsChannelName: false, isDimmed: !playable)
                 }
                 .buttonStyle(.bare)
                 .focused(focus, equals: .panelItem("schedule-\(schedule.id)"))
@@ -108,9 +107,12 @@ struct SchedulePanel: View {
               }
             }
             .padding(.horizontal, Theme.screenMargin)
-            .padding(.top, 20)
-            .padding(.bottom, 30)
+            .padding(.top, 24)
+            .padding(.bottom, 36)
           }
+          // A horizontal scroll view takes all the height it is offered; hugging its row keeps
+          // the sheet at the foot of the screen instead of stretching to the top.
+          .fixedSize(horizontal: false, vertical: true)
           .scrollClipDisabled()
           .onAppear {
             if let current {
@@ -161,9 +163,10 @@ struct ChannelsPanel: View {
             }
           }
           .padding(.horizontal, Theme.screenMargin)
-          .padding(.top, 20)
-          .padding(.bottom, 30)
+          .padding(.top, 24)
+          .padding(.bottom, 36)
         }
+        .fixedSize(horizontal: false, vertical: true)
         .scrollClipDisabled()
         .onAppear {
           proxy.scrollTo(controller.channel.id, anchor: .center)
@@ -175,61 +178,86 @@ struct ChannelsPanel: View {
   }
 }
 
-/// Subtitle and audio track selection for the current stream.
-struct MediaOptionsPanel: View {
-  let controller: PlayerController
-  var focus: FocusState<PlayerScreenContent.PlayerFocus?>.Binding
+/// Track options for the current stream, the way the system player offers them: a glass
+/// popover above the button that opened it, one list per button, with the chosen track ticked
+/// and the focused row a white pill. Picking a row applies it at once and leaves the popover
+/// open, so a viewer can compare tracks; Back, or moving focus out, closes it.
+struct MediaOptionsPopover: View {
+  let title: String
+  let options: [PlayerController.MediaOption]
+  let emptyMessage: String
+  let onSelect: (PlayerController.MediaOption) -> Void
   let onClose: () -> Void
+  var focus: FocusState<PlayerScreenContent.PlayerFocus?>.Binding
 
   var body: some View {
-    PlayerSheet(title: "Audio & Subtitles", subtitle: nil, onClose: onClose) {
-      HStack(alignment: .top, spacing: 80) {
-        if !controller.hasMediaOptions {
-          Button {
-            onClose()
-          } label: {
-            Label("This stream has no alternative audio or subtitle tracks", systemImage: "captions.bubble")
-          }
-          .buttonStyle(.glass)
-          .focused(focus, equals: .panelItem("option-none"))
+    VStack(alignment: .leading, spacing: 4) {
+      Text(title)
+        .font(.caption2)
+        .foregroundStyle(.white.opacity(0.6))
+        .padding(.horizontal, 20)
+        .padding(.bottom, 8)
+      if options.isEmpty {
+        Button(action: onClose) {
+          OptionRow(title: emptyMessage, isSelected: false, showsTick: false)
         }
-        if !controller.subtitleOptions.isEmpty {
-          optionColumn(title: "Subtitles", options: controller.subtitleOptions)
-        }
-        if !controller.audioOptions.isEmpty {
-          optionColumn(title: "Audio", options: controller.audioOptions)
-        }
-        Spacer()
+        .buttonStyle(.bare)
+        .focused(focus, equals: .panelItem("option-none"))
       }
-      .padding(.horizontal, Theme.screenMargin)
-      .padding(.top, 10)
-      .padding(.bottom, 20)
-      .onAppear {
-        if let first = controller.subtitleOptions.first ?? controller.audioOptions.first {
-          focusPanelItem(focus, preferred: "option-\(first.id)", fallback: nil)
-        } else {
-          focusPanelItem(focus, preferred: "option-none", fallback: nil)
-        }
-      }
-    }
-  }
-
-  private func optionColumn(title: String, options: [PlayerController.MediaOption]) -> some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text(title.uppercased())
-        .font(.caption2.weight(.semibold))
-        .kerning(1)
-        .foregroundStyle(.white.opacity(0.5))
       ForEach(options) { option in
         Button {
-          controller.select(option, in: options)
+          onSelect(option)
         } label: {
-          Label(option.title, systemImage: option.isSelected ? "checkmark.circle.fill" : "circle")
+          OptionRow(title: option.title, isSelected: option.isSelected)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(.bare)
         .focused(focus, equals: .panelItem("option-\(option.id)"))
       }
     }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 18)
+    .frame(width: 520, alignment: .leading)
+    .glassPanel(cornerRadius: 30)
     .focusSection()
+    .onAppear {
+      if let preferred = options.first(where: \.isSelected) ?? options.first {
+        focusPanelItem(focus, preferred: "option-\(preferred.id)", fallback: options.first.map { "option-\($0.id)" })
+      } else {
+        focusPanelItem(focus, preferred: "option-none", fallback: nil)
+      }
+    }
+  }
+}
+
+/// One row of a track popover: the tick for the chosen track, the title, and a white pill while
+/// the row has focus.
+private struct OptionRow: View {
+  let title: String
+  let isSelected: Bool
+  var showsTick = true
+  @Environment(\.isFocused) private var isFocused
+
+  var body: some View {
+    HStack(spacing: 16) {
+      if showsTick {
+        Image(systemName: "checkmark")
+          .font(.caption.weight(.semibold))
+          .opacity(isSelected ? 1 : 0)
+      }
+      Text(title)
+        .font(.caption)
+        .lineLimit(1)
+      Spacer(minLength: 0)
+    }
+    .foregroundStyle(isFocused ? Theme.textOnFocus : .white)
+    .padding(.horizontal, 20)
+    .padding(.vertical, 12)
+    .background {
+      if isFocused {
+        Capsule().fill(.white)
+      }
+    }
+    .scaleEffect(isFocused ? 1.03 : 1)
+    .animation(Theme.focusAnimation, value: isFocused)
   }
 }

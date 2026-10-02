@@ -91,9 +91,8 @@ struct SearchView: View {
 
   private func hint(symbol: String, title: String, message: String) -> some View {
     VStack(spacing: 18) {
-      Image(systemName: symbol)
-        .font(.title.weight(.light))
-        .foregroundStyle(Theme.textTertiary)
+      StatusGlyph(symbol: symbol)
+        .padding(.bottom, 8)
       Text(title)
         .font(.headline.weight(.regular))
         .foregroundStyle(Theme.textPrimary)
