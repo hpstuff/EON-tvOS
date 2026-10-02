@@ -122,13 +122,7 @@ struct SettingsView: View {
       detail(label: "Catch-up", value: "\(store.channels.filter(\.canCatchUp).count) channels")
     }
     .padding(44)
-    .background {
-      RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
-        .fill(Theme.surface)
-        .overlay {
-          RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous).strokeBorder(Theme.stroke, lineWidth: 1)
-        }
-    }
+    .glassPanel()
   }
 
   private func detail(label: String, value: String) -> some View {

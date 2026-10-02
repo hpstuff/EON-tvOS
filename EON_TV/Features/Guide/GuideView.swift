@@ -364,6 +364,7 @@ struct GuideView: View {
       }
       .overlay(alignment: .topLeading) {
         GuideRuler(day: day, scroll: scroll)
+          .padding(.trailing, Theme.screenMargin)
           .allowsHitTesting(false)
       }
       .overlay(alignment: .topLeading) {
@@ -543,16 +544,19 @@ private struct GuideChannelCells: View, Equatable {
   }
 
   var body: some View {
-    VStack(spacing: metrics.rowSpacing) {
-      ForEach(channels) { channel in
-        Button {
-          onSelect(channel)
-        } label: {
-          GuideChannelCellLabel(channel: channel, number: store.channelNumber(channel))
+    // The cells at rest are glass; one container renders the column's dozen in a single pass.
+    GlassEffectContainer {
+      VStack(spacing: metrics.rowSpacing) {
+        ForEach(channels) { channel in
+          Button {
+            onSelect(channel)
+          } label: {
+            GuideChannelCellLabel(channel: channel, number: store.channelNumber(channel))
+          }
+          .buttonStyle(.bare)
+          .frame(height: metrics.rowHeight)
+          .focused(focus, equals: .channel(channel.id))
         }
-        .buttonStyle(.bare)
-        .frame(height: metrics.rowHeight)
-        .focused(focus, equals: .channel(channel.id))
       }
     }
     .frame(width: metrics.columnWidth - 12, alignment: .leading)
@@ -581,12 +585,18 @@ private struct GuideChannelCellLabel: View {
     }
     .padding(.horizontal, 12)
     .frame(width: metrics.columnWidth - 12, height: metrics.rowHeight)
+    // Glass at rest, a white platter on focus. The glass steps aside under the platter rather
+    // than sampling through an opaque fill.
     .background {
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .fill(isFocused ? Color.white : Theme.backgroundElevated.opacity(0.9))
+      if isFocused {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+          .fill(Color.white)
+          .transition(.opacity)
+      }
     }
+    .glassEffect(isFocused ? .identity : .regular, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     // A dozen cells follow every scroll frame; only the focused one carries a shadow, so the
-    // others cost nothing beyond their platter.
+    // others cost nothing beyond their glass.
     .background {
       if isFocused {
         RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -595,10 +605,6 @@ private struct GuideChannelCellLabel: View {
           .offset(x: 6)
           .transition(.opacity)
       }
-    }
-    .overlay {
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .strokeBorder(isFocused ? Color.clear : Theme.stroke, lineWidth: 1)
     }
     .scaleEffect(isFocused ? 1.03 : 1)
     .animation(Theme.focusAnimation, value: isFocused)
@@ -817,9 +823,9 @@ private struct GuideCell: View {
   }
 }
 
-/// Half-hour time ruler pinned above the programme area, scrolling horizontally with it. The
-/// marks are a separate view compared by day, so a scroll frame moves them without rebuilding
-/// (and re-formatting) forty-eight labels.
+/// Half-hour time ruler pinned above the programme area, scrolling horizontally with it: a
+/// glass bar the rows pass beneath. The marks are a separate view compared by day, so a scroll
+/// frame moves them without rebuilding (and re-formatting) forty-eight labels.
 private struct GuideRuler: View {
   let day: Date
   let scroll: GuideScrollState
@@ -834,14 +840,7 @@ private struct GuideRuler: View {
         .clipped()
     }
     .frame(height: metrics.rulerHeight)
-    .background(alignment: .top) {
-      VStack(spacing: 0) {
-        Theme.background.opacity(0.97)
-          .frame(height: metrics.rulerHeight + 4)
-        LinearGradient(colors: [Theme.background.opacity(0.97), .clear], startPoint: .top, endPoint: .bottom)
-          .frame(height: 14)
-      }
-    }
+    .glassPanel(cornerRadius: 12)
   }
 }
 

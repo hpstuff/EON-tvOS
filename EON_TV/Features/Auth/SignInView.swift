@@ -103,14 +103,7 @@ struct SignInView: View {
       #endif
     }
     .padding(48)
-    .background {
-      RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
-        .fill(Theme.surface)
-        .overlay {
-          RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous)
-            .strokeBorder(Theme.stroke, lineWidth: 1)
-        }
-    }
+    .glassPanel()
     .animation(Theme.crossfade, value: session.signInError)
     .animation(Theme.crossfade, value: mode)
     .animation(Theme.crossfade, value: session.codeSignIn)
@@ -248,14 +241,7 @@ struct SignInView: View {
       Spacer()
     }
     .padding(.vertical, 26)
-    .background {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .fill(Theme.surface)
-    }
-    .overlay {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .strokeBorder(Theme.stroke, lineWidth: 1)
-    }
+    .glassPanel(cornerRadius: 12)
   }
 
   // MARK: Pieces

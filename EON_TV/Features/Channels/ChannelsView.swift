@@ -152,9 +152,8 @@ struct ChannelsView: View {
 
   private var emptyState: some View {
     VStack(spacing: 18) {
-      Image(systemName: filter == .favorites ? "heart" : "tv")
-        .font(.title.weight(.light))
-        .foregroundStyle(Theme.textTertiary)
+      StatusGlyph(symbol: filter == .favorites ? "heart" : "tv")
+        .padding(.bottom, 8)
       Text(filter == .favorites ? "No favorites yet" : "No channels here")
         .font(.headline.weight(.regular))
         .foregroundStyle(Theme.textPrimary)

@@ -47,11 +47,20 @@ struct AuroraWaves: View {
   var seed: Int = 0
   var intensity: Double = 1
   var blurFraction: CGFloat = 0.08
+  /// On a black ground the bands have deep, dark bodies under their bright ridges. Over the
+  /// grey canvas behind whole screens those bodies would only darken what is beneath them, so
+  /// the drifting aurora draws luminous bodies instead: a faint glow in the ridge colour that
+  /// adds light wherever it falls.
+  var luminous = false
 
   var body: some View {
     let palette = AuroraGeometry.palette(seed: seed)
     let accent = AuroraGeometry.palette(seed: seed + 1)
     let variant = CGFloat(abs(seed) % 13) / 13
+    let bodyTop = luminous ? palette.core.color.opacity(0.3) : palette.mid.color.opacity(0.9)
+    let bodyBottom = (luminous ? palette.core : palette.deep).color.opacity(0)
+    let accentTop = luminous ? accent.core.color.opacity(0.24) : accent.mid.color.opacity(0.75)
+    let accentBottom = (luminous ? accent.core : accent.deep).color.opacity(0)
 
     GeometryReader { proxy in
       let size = proxy.size
@@ -59,13 +68,13 @@ struct AuroraWaves: View {
       ZStack {
         AuroraBandShape(baseline: 0.48 + variant * 0.1, amplitude: 0.13, frequency: 1.0, phase: variant, thickness: 0.45)
           .fill(LinearGradient(
-            colors: [palette.mid.color.opacity(0.9), palette.deep.color.opacity(0)],
+            colors: [bodyTop, bodyBottom],
             startPoint: .top,
             endPoint: .bottom
           ))
         AuroraBandShape(baseline: 0.60 - variant * 0.1, amplitude: 0.10, frequency: 0.75, phase: variant + 0.4, thickness: 0.35)
           .fill(LinearGradient(
-            colors: [accent.mid.color.opacity(0.75), accent.deep.color.opacity(0)],
+            colors: [accentTop, accentBottom],
             startPoint: .top,
             endPoint: .bottom
           ))
@@ -100,11 +109,11 @@ struct DriftingAurora: UIViewRepresentable {
   @Environment(\.prefersCalmInterface) private var calm
 
   func makeUIView(context: Context) -> DriftingAuroraView {
-    DriftingAuroraView(waves: AuroraWaves(seed: seed, intensity: intensity))
+    DriftingAuroraView(waves: AuroraWaves(seed: seed, intensity: intensity, luminous: true))
   }
 
   func updateUIView(_ view: DriftingAuroraView, context: Context) {
-    view.host.rootView = AuroraWaves(seed: seed, intensity: intensity)
+    view.host.rootView = AuroraWaves(seed: seed, intensity: intensity, luminous: true)
     view.isDrifting = !calm
   }
 }
@@ -122,6 +131,9 @@ final class DriftingAuroraView: UIView {
 
   init(waves: AuroraWaves) {
     host = UIHostingController(rootView: waves)
+    // The hosted view is wider than the screen and slides; the window's safe area must not
+    // inset the waves, or their edges would show as straight lines across the canvas.
+    host.safeAreaRegions = []
     super.init(frame: .zero)
     host.view.backgroundColor = .clear
     isUserInteractionEnabled = false

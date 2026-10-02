@@ -7,7 +7,8 @@ import EONKit
 /// `.glassProminent`): the platform draws the platter, the focus lift and the pressed state, so
 /// controls here look and move like controls everywhere else on tvOS. Only content — artwork
 /// cards and the packed guide grid — keeps a custom focus treatment, built on the standard
-/// focus APIs.
+/// focus APIs. Everything else that floats over content is glass too; see `glassPanel` and
+/// `glassPill` below.
 
 /// Programme cells in the guide grid: no scaling (cells are packed), a white platter on focus.
 struct GuideCellButtonStyle: ButtonStyle {
@@ -67,6 +68,30 @@ extension ButtonStyle where Self == BareButtonStyle {
   static var bare: BareButtonStyle { BareButtonStyle() }
 }
 
+// MARK: - Glass
+
+/// The app's own glass, for whatever floats over content without being a control: badges and
+/// logos on artwork, panels and sheets, the guide's time ruler. Controls use the system button
+/// styles, which draw their own. Both sample what lies beneath them, so the aurora and the
+/// artwork show through the whole interface the way they show through the sidebar.
+///
+/// Cards keep their words on the canvas beneath the artwork, the way the system TV app's
+/// episode cards do; only the focused card's caption settles onto a glass panel (`CardCaption`
+/// in Cards.swift). The packed guide cells stay opaque, and nothing glass is laid over other
+/// glass except the controls inside a panel and the badges on a card's artwork.
+extension View {
+  /// A panel: a sign-in form, an account card, a sheet in the player.
+  func glassPanel(cornerRadius: CGFloat = Theme.panelRadius) -> some View {
+    glassEffect(.regular, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+  }
+
+  /// A pill over artwork: a badge, a tag, a time. `prominent` tints it white for the rare
+  /// emphasised state, the way the prominent button style does.
+  func glassPill(prominent: Bool = false) -> some View {
+    glassEffect(prominent ? .regular.tint(.white) : .regular, in: Capsule())
+  }
+}
+
 // MARK: - Chips
 
 /// Label for a filter chip inside a glass button. Selection is shown in the label — heavier
@@ -98,8 +123,8 @@ struct FilterChipLabel: View {
 
 // MARK: - Badges
 
-/// Marks live television: a monochrome pill with the one saturated cue in the system, a red
-/// dot. The full-size badge breathes; the compact one used on cards stays still.
+/// Marks live television: a glass pill with the one saturated cue in the system, a red dot.
+/// The full-size badge breathes; the compact one used on cards stays still.
 struct LiveBadge: View {
   var compact = false
   @State private var breathing = false
@@ -119,8 +144,7 @@ struct LiveBadge: View {
     .foregroundStyle(.white)
     .padding(.horizontal, compact ? 10 : 14)
     .padding(.vertical, compact ? 5 : 7)
-    .background(Capsule().fill(Color.black.opacity(0.55)))
-    .overlay(Capsule().strokeBorder(Color.white.opacity(0.28), lineWidth: 1))
+    .glassPill()
     .onAppear {
       guard !compact, !calm else { return }
       withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) { breathing = true }
@@ -128,7 +152,8 @@ struct LiveBadge: View {
   }
 }
 
-/// Small uppercase label. Monochrome by default; `solid` inverts it for the rare emphasised state.
+/// Small uppercase label on a glass pill. `solid` turns the pill white for the rare emphasised
+/// state.
 struct Tag: View {
   let text: String
   var solid = false
@@ -141,8 +166,7 @@ struct Tag: View {
       .foregroundStyle(solid ? Theme.textOnFocus : .white)
       .padding(.horizontal, 12)
       .padding(.vertical, 6)
-      .background(Capsule().fill(solid ? Color.white : Color.black.opacity(0.5)))
-      .overlay(Capsule().strokeBorder(Color.white.opacity(solid ? 0 : 0.25), lineWidth: 1))
+      .glassPill(prominent: solid)
   }
 }
 
@@ -270,6 +294,20 @@ final class ShimmerSweepView: UIView {
 
 // MARK: - Status
 
+/// The symbol above a status message, on a glass disc.
+struct StatusGlyph: View {
+  let symbol: String
+  @ScaledMetric(relativeTo: .title) private var diameter: CGFloat = 150
+
+  var body: some View {
+    Image(systemName: symbol)
+      .font(.title.weight(.light))
+      .foregroundStyle(Theme.textSecondary)
+      .frame(width: diameter, height: diameter)
+      .glassEffect(in: Circle())
+  }
+}
+
 /// Full-bleed empty, error and offline states with an optional primary action.
 struct StatusView: View {
   let symbol: String
@@ -280,9 +318,8 @@ struct StatusView: View {
 
   var body: some View {
     VStack(spacing: 24) {
-      Image(systemName: symbol)
-        .font(.title.weight(.light))
-        .foregroundStyle(Theme.textSecondary)
+      StatusGlyph(symbol: symbol)
+        .padding(.bottom, 8)
       Text(title)
         .font(.headline.weight(.regular))
         .foregroundStyle(Theme.textPrimary)
@@ -305,15 +342,23 @@ struct StatusView: View {
 
 // MARK: - Ambient backdrop
 
-/// The black canvas with a faint, blurred trace of the featured artwork behind a screen; it
-/// cross-fades when the featured image changes and always settles back into black at the foot.
-/// When the system prefers a calmer interface the aurora holds still and the blurred artwork is
-/// skipped, which is the costliest layer on screen.
+/// The fill behind a screen, in the manner of the system TV app's show pages: a heavily blurred,
+/// darkened wash of the featured artwork that colours the whole screen, brighter towards the top
+/// and settling into deep shadow at the foot without ever going flat black. The aurora drifts
+/// beneath it and carries the canvas on its own where there is no artwork; while artwork is up
+/// it steps back so its bands don't cut through the wash. The wash cross-fades when the
+/// featured image changes. When the system prefers a calmer interface the aurora holds still and
+/// the blurred artwork is skipped, which is the costliest layer on screen.
 ///
 /// The artwork only follows `url` once it has held still for a moment, so running focus along a
 /// shelf doesn't start a full-screen crossfade on every card. The blur is applied to the artwork
 /// at its native size and the result scaled up to fill the screen, which reads the same as
 /// blurring the screen-sized image and costs a small fraction of the pixels.
+///
+/// `intensity` is how much of the artwork's own colour comes through: 0.4 on Home, where the
+/// hero follows focus and the wash should stay a backdrop, up to 0.7 on a details screen that
+/// is about one programme. The wash is composited over the grey canvas rather than black, so a
+/// typical programme still lands around a fifth of full brightness, where the TV app sits.
 struct AmbientBackdrop: View {
   let url: URL?
   var intensity: Double = 0.4
@@ -323,21 +368,25 @@ struct AmbientBackdrop: View {
   /// How long the featured artwork must stay the same before the backdrop takes it on.
   static let settleDelay: Duration = .milliseconds(320)
 
+  private var showsArtwork: Bool { shownURL != nil && !calm }
+
   var body: some View {
     ZStack {
       Theme.backgroundGradient
       DriftingAurora(seed: 0, intensity: 0.45)
+        .opacity(showsArtwork ? 0.3 : 1)
       if let shownURL, !calm {
         BlurredArtwork(url: shownURL)
           .id(shownURL)
           .transition(.opacity)
-          .opacity(intensity * 0.5)
+          .opacity(min(0.6, intensity * 1.4))
       }
+      // A gentle vignette towards the foot, where the shelves run; never flat black.
       LinearGradient(
         stops: [
-          .init(color: .black.opacity(0.35), location: 0),
-          .init(color: .black.opacity(0.75), location: 0.55),
-          .init(color: .black, location: 1),
+          .init(color: .black.opacity(0), location: 0),
+          .init(color: .black.opacity(0.12), location: 0.5),
+          .init(color: .black.opacity(0.28), location: 1),
         ],
         startPoint: .top,
         endPoint: .bottom
@@ -369,8 +418,9 @@ private struct BlurredArtwork: View {
       RemoteImage(url: url) { Color.clear }
         .frame(width: size.width, height: size.height)
         .clipped()
-        .blur(radius: 24)
-        .saturation(0.9)
+        .blur(radius: 28)
+        .saturation(0.85)
+        .brightness(0.05)
         .scaleEffect(scale)
         .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
     }
@@ -380,7 +430,7 @@ private struct BlurredArtwork: View {
 
 // MARK: - Channel logo
 
-/// Channel logo on a subtle platter so light logos always read against artwork.
+/// Channel logo on a small glass platter so light logos always read against artwork.
 struct ChannelLogo: View {
   let channel: Channel
   var height: CGFloat = 44
@@ -399,11 +449,6 @@ struct ChannelLogo: View {
     .frame(minWidth: height * 1.2, maxWidth: height * 2.2)
     .padding(.horizontal, platter ? 10 : 0)
     .padding(.vertical, platter ? 6 : 0)
-    .background {
-      if platter {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
-          .fill(Color.black.opacity(0.5))
-      }
-    }
+    .glassEffect(platter ? .regular : .identity, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
   }
 }
