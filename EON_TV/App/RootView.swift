@@ -29,6 +29,10 @@ struct RootView: View {
         SignInView()
           .transition(.opacity)
 
+      case .choosingProfile:
+        ProfilePickerView()
+          .transition(.opacity)
+
       case .signedIn:
         if let content = session.content {
           MainTabView()
@@ -42,7 +46,7 @@ struct RootView: View {
       session.boot(demo: ProcessInfo.processInfo.arguments.contains("-demo"))
     }
     .onChange(of: scenePhase) { _, phase in
-      if phase == .active { session.didBecomeActive() }
+      if phase == .active { session.didBecomeActive() } else if phase == .background { session.didResignActive() }
     }
   }
 }

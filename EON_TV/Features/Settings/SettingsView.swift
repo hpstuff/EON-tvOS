@@ -8,6 +8,7 @@ struct SettingsView: View {
   @Environment(ContentStore.self) private var store
   @Environment(FavoritesStore.self) private var favorites
   @Environment(WatchHistory.self) private var history
+  @Environment(ProfileStore.self) private var profiles
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   @State private var confirmSignOut = false
@@ -15,7 +16,7 @@ struct SettingsView: View {
   @FocusState private var focus: Focus?
 
   private enum Focus: Hashable {
-    case refresh, clearHistory, clearFavorites, signOut
+    case switchProfile, askAtLaunch, refresh, clearHistory, clearFavorites, signOut
   }
 
   private var isAccessibilitySize: Bool { dynamicTypeSize.isAccessibilitySize }
@@ -39,6 +40,28 @@ struct SettingsView: View {
               .font(.screenTitle)
               .foregroundStyle(Theme.textPrimary)
 
+            if profiles.hasChoice {
+              settingsRow(
+                title: "Switch Profile",
+                detail: "Watching as \(profiles.active?.name ?? "the default profile"). Favourites and history follow the profile.",
+                symbol: "person.2",
+                focus: .switchProfile
+              ) {
+                session.switchProfile()
+              }
+
+              settingsRow(
+                title: profiles.askAtLaunch ? "Ask Who's Watching: On" : "Ask Who's Watching: Off",
+                detail: profiles.askAtLaunch
+                  ? "Choose a profile each time EON TV opens."
+                  : "EON TV opens as the last profile used.",
+                symbol: profiles.askAtLaunch ? "checkmark.circle" : "circle",
+                focus: .askAtLaunch
+              ) {
+                profiles.askAtLaunch.toggle()
+              }
+            }
+
             settingsRow(
               title: "Refresh channels & guide",
               detail: "Reload the line-up and today's guide from EON.",
@@ -59,11 +82,11 @@ struct SettingsView: View {
 
             settingsRow(
               title: "Clear Favorites",
-              detail: "Removes all \(favorites.ids.count) favourite channels from this Apple TV.",
+              detail: "Removes all \(favorites.ids.count) favourite channels from this profile, here and in the EON web app.",
               symbol: "heart.slash",
               focus: .clearFavorites
             ) {
-              favorites.ids.compactMap { store.channel($0) }.forEach { favorites.toggle($0) }
+              favorites.removeAll()
             }
 
             settingsRow(
@@ -95,7 +118,7 @@ struct SettingsView: View {
       Button("Sign Out", role: .destructive) { Task { await session.signOut() } }
       Button("Cancel", role: .cancel) {}
     } message: {
-      Text("Favourites stay on this Apple TV. Continue Watching will be cleared.")
+      Text("Favourites stay with your EON account. Continue Watching will be cleared.")
     }
     .alert("Clear Continue Watching?", isPresented: $confirmClearHistory) {
       Button("Clear", role: .destructive) { history.clear() }
@@ -115,6 +138,20 @@ struct SettingsView: View {
           .foregroundStyle(Theme.textTertiary)
       }
       Divider().overlay(Theme.stroke)
+      if let profile = profiles.active {
+        HStack(spacing: 20) {
+          ProfileAvatar(profile: profile, size: 64)
+          VStack(alignment: .leading, spacing: 4) {
+            Text(profile.name)
+              .font(.headline.weight(.regular))
+              .foregroundStyle(Theme.textPrimary)
+            Text("Profile")
+              .font(.caption2)
+              .foregroundStyle(Theme.textTertiary)
+          }
+        }
+        Divider().overlay(Theme.stroke)
+      }
       detail(label: "Contract", value: session.household?.contractNumber ?? "—")
       detail(label: "This Apple TV", value: session.device.map { $0.friendlyId.isEmpty ? $0.deviceNumber : $0.friendlyId } ?? "—")
       detail(label: "Channels", value: "\(store.channels.count) subscribed")

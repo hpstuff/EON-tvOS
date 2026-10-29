@@ -8,6 +8,11 @@ struct Backend {
   let channels: ChannelsRepository
   let epg: EpgRepository
   let streaming: StreamingRepository
+  let favorites: FavoritesRepository
+  let parental: ParentalControlRepository
+  let profiles: ProfilesRepository
+  /// Platform host the artwork paths (logos, avatars) are relative to.
+  let baseURL: String
   /// Re-synchronises `ServerTime` with the platform clock.
   let syncClock: () async throws -> Void
   /// Whether credentials from a previous session are stored on this device.
@@ -28,7 +33,9 @@ enum BackendFactory {
       androidTVClientID: Secrets.androidTVClientID,
       androidTVClientSecret: Secrets.androidTVClientSecret,
       webClientID: Secrets.webClientID,
-      webClientSecret: Secrets.webClientSecret
+      webClientSecret: Secrets.webClientSecret,
+      smartTVClientID: Secrets.smartTVClientID,
+      smartTVClientSecret: Secrets.smartTVClientSecret
     ))
 
     // The SDK's cache interceptor captures `URLCache.shared`, so size it before building the chain.
@@ -38,7 +45,7 @@ enum BackendFactory {
       diskPath: "eon-api"
     )
 
-    var interceptors: [Interceptor] = [HeadersInterceptor()]
+    var interceptors: [Interceptor] = [HeadersInterceptor(language: platformLanguage)]
     #if DEBUG
     interceptors.append(LoggingInterceptor())
     #endif
@@ -54,6 +61,9 @@ enum BackendFactory {
     let channelsService = ChannelsService(client: client, baseURL: baseURL)
     let streamingService = StreamingService(client: client, baseURL: baseURL)
     let epgService = EpgService(client: client, baseURL: baseURL)
+    let favoritesService = FavoritesService(client: client, baseURL: baseURL)
+    let householdService = HouseholdService(client: client, baseURL: baseURL)
+    let profilesService = ProfilesService(client: client, baseURL: baseURL)
 
     // Auth must run before the cache on the way out (bearer token) and before it on the way
     // back (401 → refresh → retry) so only the final, authorised payload is ever cached.
@@ -72,6 +82,15 @@ enum BackendFactory {
       channels: ChannelsRepositoryImpl(channelsService: channelsService),
       epg: EpgRepositoryImpl(epgService: epgService, streamingService: streamingService),
       streaming: StreamingRepositoryImpl(streamingService: streamingService, tokenStore: tokenStore, deviceStore: deviceStore),
+      favorites: FavoritesRepositoryImpl(favoritesService: favoritesService),
+      parental: ParentalControlRepositoryImpl(householdService: householdService),
+      profiles: ProfilesRepositoryImpl(
+        profilesService: profilesService,
+        loginService: loginService,
+        tokenStore: tokenStore,
+        deviceStore: deviceStore
+      ),
+      baseURL: baseURL,
       syncClock: { _ = try await streamingService.getTime() },
       // Tokens are only usable together with the device they were issued to; a session from
       // before device registration existed is treated as signed out.
@@ -86,6 +105,12 @@ enum BackendFactory {
       clearSession: { await tokenStore.clear(); await deviceStore.clearRegistration() },
       isDemo: false
     )
+  }
+
+  /// Language the platform names categories in: Bulgarian on a Bulgarian Apple TV, English
+  /// otherwise. Programme titles come from the broadcasters and are unaffected.
+  static var platformLanguage: String {
+    Locale.preferredLanguages.first?.hasPrefix("bg") == true ? "bg" : "en"
   }
 
   /// Uses the last known API host immediately for a fast launch and refreshes it quietly;
@@ -134,6 +159,10 @@ enum ErrorPresenter {
         return "This Apple TV isn't registered with your provider. Please try again."
       case .codeNotConfirmed:
         return "The code hasn't been confirmed yet."
+      case .codeExpired:
+        return "This code has expired. Get a new one to continue."
+      case .wrongPin:
+        return "That PIN isn't right. Try again."
       case .sessionExpired:
         return "Your session has expired. Please sign in again."
       case .grantNotAllowed:

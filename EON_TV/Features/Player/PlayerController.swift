@@ -23,6 +23,8 @@ final class PlayerController: NSObject {
     case loading(obscuresVideo: Bool)
     case playing
     case failed(String)
+    /// An adult channel waits for the household PIN before anything is streamed.
+    case needsPin
 
     var isLoading: Bool {
       if case .loading = self { return true }
@@ -60,6 +62,7 @@ final class PlayerController: NSObject {
   let store: ContentStore
   let history: WatchHistory
   let favorites: FavoritesStore
+  let gate: ParentalGate
   let clock: LiveClock
 
   /// Seconds of live stream the player can safely resume from after a pause.
@@ -88,6 +91,8 @@ final class PlayerController: NSObject {
   private var pausedAt: Date?
   private var nowPlaying: NowPlayingBridge?
   private var lastPlayPauseToggle: Date = .distantPast
+  /// What was playing before a switch to a locked channel, so cancelling the PIN goes back to it.
+  private var beforeLock: (channel: Channel, mode: PlaybackRequest.Mode)?
 
   var isLive: Bool { if case .live = mode { return true } else { return false } }
   var isFavorite: Bool { favorites.contains(channel.id) }
@@ -97,7 +102,9 @@ final class PlayerController: NSObject {
     return false
   }
 
-  init(request: PlaybackRequest, backend: Backend, store: ContentStore, history: WatchHistory, favorites: FavoritesStore, clock: LiveClock) {
+  var needsPin: Bool { phase == .needsPin }
+
+  init(request: PlaybackRequest, backend: Backend, store: ContentStore, history: WatchHistory, favorites: FavoritesStore, gate: ParentalGate, clock: LiveClock) {
     self.channel = request.channel
     self.mode = request.mode
     self.lineup = request.lineup.isEmpty ? store.channels : request.lineup
@@ -105,6 +112,7 @@ final class PlayerController: NSObject {
     self.store = store
     self.history = history
     self.favorites = favorites
+    self.gate = gate
     self.clock = clock
     super.init()
     // Apple TV never sends AirPlay Video anywhere; leaving the switch on only muddies audio routing.
@@ -156,6 +164,11 @@ final class PlayerController: NSObject {
   // MARK: Loading
 
   func load(channel: Channel, mode: PlaybackRequest.Mode) {
+    if gate.needsPin(for: channel) {
+      lock(channel: channel, mode: mode)
+      return
+    }
+    beforeLock = nil
     saveResumePosition(force: true)
     loadTask?.cancel()
     // The item that is still playing belongs to the previous request; nothing it reports from
@@ -185,6 +198,41 @@ final class PlayerController: NSObject {
     }
   }
 
+  /// Stops whatever is playing and asks for the PIN; nothing of the locked channel is requested.
+  private func lock(channel: Channel, mode: PlaybackRequest.Mode) {
+    if phase == .playing || phase.isLoading, !self.channel.requiresParentalPin || gate.isUnlocked {
+      beforeLock = (self.channel, self.mode)
+    }
+    saveResumePosition(force: true)
+    loadTask?.cancel()
+    detachItemObservers()
+    player.pause()
+    player.replaceCurrentItem(with: nil)
+    self.channel = channel
+    self.mode = mode
+    currentProgram = mode.schedule ?? store.nowPlaying(channel)
+    isPaused = false
+    phase = .needsPin
+  }
+
+  /// Checks the PIN and, when it is right, starts the channel that was waiting for it.
+  func unlock(with pin: String) async -> ParentalGate.Outcome {
+    let outcome = await gate.unlock(with: pin)
+    if outcome == .unlocked {
+      load(channel: channel, mode: mode)
+    }
+    return outcome
+  }
+
+  /// Goes back to what was playing before the locked channel. Returns false when there is
+  /// nothing to go back to, and the player should close.
+  func cancelUnlock() -> Bool {
+    guard let beforeLock else { return false }
+    self.beforeLock = nil
+    load(channel: beforeLock.channel, mode: beforeLock.mode)
+    return true
+  }
+
   /// A first load, a channel change or a recovery from failure hides the old picture, which
   /// would be the wrong channel or a frozen frame. A move within the same channel keeps the
   /// picture, and a move made while an earlier one is still loading keeps whatever that one
@@ -194,7 +242,7 @@ final class PlayerController: NSObject {
     switch phase {
     case .playing: return false
     case .loading(let obscures): return obscures
-    case .failed: return true
+    case .failed, .needsPin: return true
     }
   }
 

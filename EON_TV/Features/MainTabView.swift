@@ -8,6 +8,8 @@ import EONKit
 struct MainTabView: View {
   @Environment(AppSession.self) private var session
   @Environment(ContentStore.self) private var store
+  @Environment(ProfileStore.self) private var profiles
+  @Environment(FavoritesStore.self) private var favorites
   @State private var coordinator = PlaybackCoordinator()
 
   var body: some View {
@@ -44,6 +46,14 @@ struct MainTabView: View {
         .environment(coordinator)
         .environment(store)
     }
+    .alert(
+      favorites.lastError ?? "",
+      isPresented: Binding(get: { favorites.lastError != nil }, set: { if !$0 { favorites.lastError = nil } })
+    ) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text("Check your connection and try again.")
+    }
   }
 
   /// tvOS 27 lets the sidebar carry a header and footer: the mark above the sections, the
@@ -58,6 +68,15 @@ struct MainTabView: View {
         }
         .tabViewSidebarFooter {
           VStack(alignment: .leading, spacing: 4) {
+            if let profile = profiles.active, profiles.hasChoice {
+              HStack(spacing: 12) {
+                ProfileAvatar(profile: profile, size: 36)
+                Text(profile.name)
+                  .font(.caption.weight(.semibold))
+                  .foregroundStyle(Theme.textPrimary)
+              }
+              .padding(.bottom, 6)
+            }
             Text(session.household?.packageName ?? "EON TV")
               .font(.caption)
               .foregroundStyle(Theme.textSecondary)

@@ -51,6 +51,8 @@ final class ContentStore {
 
   private let backend: Backend
   let clock: LiveClock
+  /// The profile the line-up is for; channels rated above its maturity are left out.
+  let profile: Profile?
 
   // Line-up
   private(set) var categories: [ChannelCategory] = []
@@ -73,9 +75,10 @@ final class ContentStore {
   private var nextByChannel: [Int: Schedule] = [:]
   private var lastShelfNow: Int = 0
 
-  init(backend: Backend, clock: LiveClock) {
+  init(backend: Backend, clock: LiveClock, profile: Profile? = nil) {
     self.backend = backend
     self.clock = clock
+    self.profile = profile
     clock.onDayChange = { [weak self] day in self?.handleDayChange(day) }
     recomputeGuideDays()
   }
@@ -113,7 +116,8 @@ final class ContentStore {
     }
   }
 
-  private func apply(categories fetched: [ChannelCategory]) {
+  private func apply(categories unfiltered: [ChannelCategory]) {
+    let fetched = unfiltered.compactMap(suitedToProfile)
     let lineup: [Channel]
     if let defaultList = fetched.first(where: { $0.defaultList }) {
       lineup = defaultList.channels
@@ -137,6 +141,15 @@ final class ContentStore {
       Task { await ensureEPG(day: clock.dayStart, for: channels) }
     }
     recomputeShelves(force: true)
+  }
+
+  /// The category without channels the profile may not watch, or nil if none are left.
+  private func suitedToProfile(_ category: ChannelCategory) -> ChannelCategory? {
+    guard let profile else { return category }
+    let kept = category.channels.filter { profile.allows(ageRating: $0.ageRating) }
+    guard !kept.isEmpty else { return nil }
+    guard kept.count != category.channels.count else { return category }
+    return ChannelCategory(id: category.id, name: category.name, defaultList: category.defaultList, order: category.order, channels: kept)
   }
 
   func channel(_ id: Int) -> Channel? { channelsByID[id] }
@@ -292,10 +305,13 @@ final class ContentStore {
         current = spill
       }
       if let current { nowMap[channel.id] = current }
+      let next = list.first(where: { $0.startTime > now })
+      if let next { nextMap[channel.id] = next }
+      // Home's shelves stay free of adult channels; they are still in Channels, Guide and Search.
+      guard !channel.requiresParentalPin else { continue }
       onNow.append(OnNowItem(channel: channel, schedule: current))
 
-      if let next = list.first(where: { $0.startTime > now }) {
-        nextMap[channel.id] = next
+      if let next {
         if next.startTime - now <= 3 * 3_600_000 {
           upNext.append(ProgramItem(channel: channel, schedule: next))
         }

@@ -10,15 +10,18 @@ final class AppSession {
     case launching
     case unavailable(String)
     case signedOut
+    /// Signed in, waiting for the viewer to say who's watching.
+    case choosingProfile
     case signedIn
   }
 
-  /// Progress of the sign-in-with-a-code option: the platform issues a code for this device,
-  /// the viewer confirms it in the provider's portal, and the app polls until it is accepted.
+  /// Progress of the sign-in-with-a-code option: the platform issues an `xxxx-xxxx` code for
+  /// this device, the viewer confirms it on the provider's website, and the app polls until it
+  /// is accepted (the OAuth device-code grant).
   enum CodeSignIn: Equatable {
     case idle
     case requesting
-    case waiting(code: String, expiresAt: Date)
+    case waiting(OneTimeCode, expiresAt: Date)
     case expired
     case failed(String)
   }
@@ -33,6 +36,8 @@ final class AppSession {
   let clock = LiveClock()
   let favorites = FavoritesStore()
   let history = WatchHistory()
+  let profiles = ProfileStore()
+  let parentalGate = ParentalGate()
 
   private(set) var isSigningIn = false
   var signInError: String?
@@ -40,8 +45,6 @@ final class AppSession {
   private var bootTask: Task<Void, Never>?
   private var codeTask: Task<Void, Never>?
 
-  /// How often the pending code is offered to the platform while waiting for confirmation.
-  static let codePollInterval: Duration = .seconds(5)
 
   var isDemo: Bool { backend?.isDemo ?? false }
 
@@ -130,10 +133,10 @@ final class AppSession {
       return
     }
     let expiresAt = Date().addingTimeInterval(TimeInterval(code.expiresInSeconds))
-    codeSignIn = .waiting(code: code.otp, expiresAt: expiresAt)
+    codeSignIn = .waiting(code, expiresAt: expiresAt)
 
     while !Task.isCancelled {
-      try? await Task.sleep(for: Self.codePollInterval)
+      try? await Task.sleep(for: .seconds(code.pollInterval))
       if Task.isCancelled { return }
       if Date() >= expiresAt {
         codeSignIn = .expired
@@ -147,6 +150,9 @@ final class AppSession {
         return
       } catch AuthError.codeNotConfirmed {
         continue
+      } catch AuthError.codeExpired {
+        if !Task.isCancelled { codeSignIn = .expired }
+        return
       } catch is URLError {
         // A network blip should not abandon a code the viewer may be typing right now.
         continue
@@ -160,12 +166,17 @@ final class AppSession {
   func signOut() async {
     cancelCodeSignIn()
     await backend?.clearSession()
-    content?.stop()
-    content = nil
+    stopContent()
     household = nil
     device = nil
     history.clear()
+    profiles.clear()
     phase = .signedOut
+  }
+
+  /// The app left the foreground: adult channels need the PIN again.
+  func didResignActive() {
+    parentalGate.lock()
   }
 
   /// Called when the scene returns to the foreground: re-sync the clock and top up content
@@ -182,10 +193,57 @@ final class AppSession {
   private func enter(_ household: Household) {
     guard let backend else { return }
     self.household = household
-    let store = ContentStore(backend: backend, clock: clock)
+    parentalGate.attach(backend.parental)
+    Task { device = await backend.auth.registeredDevice() }
+    Task { await resolveProfile() }
+  }
+
+  // MARK: Profiles
+
+  /// Asks who's watching when the household has several profiles (unless the viewer turned
+  /// that off), otherwise carries on as the profile the session already acts as.
+  private func resolveProfile() async {
+    guard let backend else { return }
+    phase = .launching
+    // Without profiles the session simply stays on the platform's default.
+    try? await profiles.load(from: backend.profiles)
+    if profiles.hasChoice && profiles.askAtLaunch {
+      phase = .choosingProfile
+    } else {
+      startContent()
+    }
+  }
+
+  /// Switches the session to `profile` and opens its content. A protected profile needs its
+  /// `pin`; the platform checks it and a wrong one throws `AuthError.wrongPin`.
+  func choose(_ profile: Profile, pin: String? = nil) async throws {
+    guard let backend else { return }
+    try await profiles.activate(profile, pin: pin, using: backend.profiles)
+    startContent()
+  }
+
+  /// Leaves the current profile's content and shows "Who's watching?".
+  func switchProfile() {
+    guard phase == .signedIn else { return }
+    stopContent()
+    phase = .choosingProfile
+  }
+
+  private func startContent() {
+    guard let backend else { return }
+    parentalGate.lock()
+    history.use(profileID: profiles.activeID)
+    let store = ContentStore(backend: backend, clock: clock, profile: profiles.active)
     content = store
     phase = .signedIn
     Task { await store.loadInitial() }
-    Task { device = await backend.auth.registeredDevice() }
+    Task { await favorites.attach(backend.favorites) }
+  }
+
+  private func stopContent() {
+    content?.stop()
+    content = nil
+    favorites.detach()
+    parentalGate.lock()
   }
 }

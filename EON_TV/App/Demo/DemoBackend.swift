@@ -11,11 +11,16 @@ enum DemoBackend {
 
   static func make() -> Backend {
     let fixtures = DemoFixtures()
+    let profiles = DemoProfilesRepository()
     return Backend(
       auth: DemoAuthRepository(),
       channels: DemoChannelsRepository(fixtures: fixtures),
       epg: DemoEpgRepository(fixtures: fixtures),
       streaming: DemoStreamingRepository(),
+      favorites: DemoFavoritesRepository(profiles: profiles),
+      parental: DemoParentalControlRepository(),
+      profiles: profiles,
+      baseURL: baseURL,
       syncClock: {},
       hasStoredSession: { true },
       clearSession: {},
@@ -38,7 +43,14 @@ final class DemoAuthRepository: AuthRepository {
   func requestOneTimeCode() async throws -> OneTimeCode {
     try? await Task.sleep(for: .milliseconds(600))
     codeAttempts = 0
-    return OneTimeCode(otp: "DEMO42", expiresInSeconds: 600)
+    return OneTimeCode(
+      otp: "DEMO-4242",
+      expiresInSeconds: 600,
+      deviceCode: "demo-device-code",
+      verificationURL: URL(string: "https://vivacom.bg/account/signin"),
+      verificationURLComplete: URL(string: "https://vivacom.bg/account/signin?user_code=DEMO-4242"),
+      pollInterval: 2
+    )
   }
   /// "Confirmed" on the second poll so the waiting state is visible for a moment.
   func login(oneTimeCode: OneTimeCode) async throws -> Household {
@@ -92,6 +104,55 @@ final class DemoStreamingRepository: StreamingRepository {
   }
 }
 
+/// Two profiles: the household's default and a PIN-protected kids profile that only sees
+/// channels rated 12 or lower.
+final class DemoProfilesRepository: ProfilesRepository {
+  private let profiles = [
+    Profile(id: 1, name: "Family", ageCategory: "ADULT", maturityRating: 18, isDefault: true),
+    Profile(id: 2, name: "Kids", ageCategory: "KIDS", maturityRating: 12, pinProtected: true),
+  ]
+  private(set) var activeID = 1
+
+  func getProfiles() async throws -> [Profile] { profiles }
+  func activeProfileID() async -> Int? { activeID }
+  func activate(profileID: Profile.ID, pin: String?) async throws {
+    try? await Task.sleep(for: .milliseconds(400))
+    if profiles.first(where: { $0.id == profileID })?.pinProtected == true, pin != DemoParentalControlRepository.pin {
+      throw AuthError.wrongPin
+    }
+    activeID = profileID
+  }
+}
+
+/// Favourites per demo profile, kept in memory.
+final class DemoFavoritesRepository: FavoritesRepository {
+  private let profiles: DemoProfilesRepository
+  private var lists: [Int: [Int]] = [1: [103, 115]]
+
+  init(profiles: DemoProfilesRepository) { self.profiles = profiles }
+
+  func getFavorites() async throws -> FavoriteList {
+    FavoriteList(id: profiles.activeID, name: "Favorites", channelIDs: lists[profiles.activeID] ?? [])
+  }
+
+  func update(list: FavoriteList.ID, adding: [Int], removing: [Int]) async throws {
+    try? await Task.sleep(for: .milliseconds(200))
+    var ids = (lists[list] ?? []).filter { !removing.contains($0) }
+    ids += adding.filter { !ids.contains($0) }
+    lists[list] = ids
+  }
+}
+
+/// The demo household PIN is 0000.
+final class DemoParentalControlRepository: ParentalControlRepository {
+  static let pin = "0000"
+
+  func verify(pin: String) async throws -> Bool {
+    try? await Task.sleep(for: .milliseconds(300))
+    return pin == Self.pin
+  }
+}
+
 // MARK: - Fixtures
 
 /// Deterministic channel line-up and programme data.
@@ -105,6 +166,7 @@ final class DemoFixtures {
     let channels: [(String, String)]
     let titles: [String]
     let durations: [Int]
+    var ageRating: String?
   }
 
   private static let genres: [Genre] = [
@@ -116,7 +178,7 @@ final class DemoFixtures {
           durations: [60, 90, 120, 150, 45, 60]),
     Genre(name: "Movies", channels: [("HBO", "HBO"), ("Cinemax", "CMAX"), ("Kino Nova", "KINO"), ("Fox Movies", "FOXM"), ("AMC", "AMC"), ("Film+", "FILM+")],
           titles: ["The Last Signal", "Northern Lights", "Midnight in Sofia", "Paper Kingdom", "Quiet Harbor", "Iron Horizon", "The Cartographer", "Blue Monday", "A Winter Guest", "Hollow Road"],
-          durations: [95, 110, 120, 135, 90, 105]),
+          durations: [95, 110, 120, 135, 90, 105], ageRating: "16"),
     Genre(name: "Kids", channels: [("Nickelodeon", "NICK"), ("Cartoon Network", "CN"), ("Disney Channel", "DISNEY"), ("Boomerang", "BOOM")],
           titles: ["Rocket Pals", "Puzzle Forest", "Captain Whiskers", "Dino Camp", "The Tiny Explorers", "Sky Racers", "Robot School", "Magic Bakery"],
           durations: [15, 20, 25, 30, 45]),
@@ -129,6 +191,9 @@ final class DemoFixtures {
     Genre(name: "Entertainment", channels: [("bTV", "bTV"), ("Nova TV", "NOVA"), ("bTV Comedy", "COMEDY"), ("Fox", "FOX"), ("TLC", "TLC"), ("Star Channel", "STAR")],
           titles: ["The Morning Show", "Cooking Duel", "Family Ties", "The Big Quiz", "Hidden Talents", "Neighbours", "Late Night Live", "Home Makeover", "Comedy Club", "Mystery Hour"],
           durations: [30, 45, 60, 60, 90]),
+    Genre(name: "Adult", channels: [("Velvet TV", "VELVET")],
+          titles: ["Late Movie"],
+          durations: [60, 90], ageRating: "18"),
   ]
 
   init() {
@@ -145,7 +210,7 @@ final class DemoFixtures {
           id: id,
           name: name,
           shortName: short,
-          images: [ChannelImage(path: "/logo/\(id)?t=\(short.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? short)", width: 480, height: 270, size: "XL", type: "LOGO")],
+          logos: ["LOGO_16_9_DARK": [ImageRendition(path: "/logo/\(id)?t=\(short.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? short)", height: 270)]],
           baseURL: DemoBackend.baseURL,
           publishingPoint: [PublishingPoint(publishingPoint: "demo-\(id)", audioLanguage: "eng", subtitleLanguage: "eng", profileIds: [1], playerCfgs: [PlayerConfig(id: 1, type: "live", sig: "demo"), PlayerConfig(id: 2, type: "cutv", sig: "demo")])],
           subscribed: true,
@@ -156,12 +221,13 @@ final class DemoFixtures {
           drEnabled: true,
           aaEnabled: false,
           startOverEnabled: canCatchUp,
-          cutvDelay: 7
+          cutvDelay: 7,
+          ageRating: genre.ageRating
         )
         members.append(channel)
         all.append(channel)
       }
-      cats.append(ChannelCategory(id: 10 + genreIndex, name: genre.name, defaultList: false, channels: members))
+      cats.append(ChannelCategory(id: 10 + genreIndex, name: genre.name, defaultList: false, order: genreIndex + 1, channels: members))
     }
     channels = all
     categories = [ChannelCategory(id: 1, name: "All Channels", defaultList: true, channels: all)] + cats
