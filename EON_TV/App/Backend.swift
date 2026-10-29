@@ -24,9 +24,10 @@ struct Backend {
 
 /// Wires the SDK: network client → interceptor chain → provider discovery → services → repositories.
 enum BackendFactory {
-  /// CDN entry to use from the broker. The SDK's device registration is bound to this provider.
-  static let providerIdentifier = "vivacom"
-  private static let baseURLKey = "eon.platform.baseURL"
+  private static let brand = BrandConfig.current
+  /// Cached per brand: each brand may be served by a different CDN.
+  private static let baseURLKey = "eon.platform.baseURL.\(brand.identifier)"
+  private static let brandKey = "eon.platform.brand"
 
   static func makeLive() async throws -> Backend {
     EONSDK.configure(credentials: ClientCredentials(
@@ -52,6 +53,15 @@ enum BackendFactory {
     let client = NetworkClient(interceptors: interceptors)
     let tokenStore = TokenStore()
     let deviceStore = DeviceStore()
+
+    // A session belongs to the operator that issued it. When a build for another brand is
+    // installed over this one, start signed out instead of presenting those tokens elsewhere.
+    let defaults = UserDefaults.standard
+    if let previous = defaults.string(forKey: brandKey), previous != brand.identifier {
+      await tokenStore.clear()
+      await deviceStore.clearRegistration()
+    }
+    defaults.set(brand.identifier, forKey: brandKey)
 
     let configService = ConfigService(client: client)
     let baseURL = try await resolveBaseURL(using: configService)
@@ -107,10 +117,11 @@ enum BackendFactory {
     )
   }
 
-  /// Language the platform names categories in: Bulgarian on a Bulgarian Apple TV, English
-  /// otherwise. Programme titles come from the broadcasters and are unaffected.
+  /// Language the platform names categories in: the brand's own when the Apple TV is set to
+  /// it, English otherwise. Programme titles come from the broadcasters and are unaffected.
   static var platformLanguage: String {
-    Locale.preferredLanguages.first?.hasPrefix("bg") == true ? "bg" : "en"
+    let preferred = Locale.preferredLanguages.first.flatMap { Locale.Language(identifier: $0).languageCode?.identifier }
+    return preferred == brand.language ? brand.language : "en"
   }
 
   /// Uses the last known API host immediately for a fast launch and refreshes it quietly;
@@ -125,12 +136,7 @@ enum BackendFactory {
 
   @discardableResult
   private static func discoverBaseURL(using config: ConfigService) async throws -> String {
-    let token = try await config.getClientToken()
-    let entries = try await config.cdnInfo(accessToken: token.access_token)
-    guard let entry = entries.first(where: { $0.identifier == providerIdentifier }) ?? entries.first else {
-      throw NetworkError.notConfigured
-    }
-    let host = entry.domains.baseApi.af31
+    let host = try await config.cdn(forBrand: brand.identifier).domains.baseApi.af31
     UserDefaults.standard.set(host, forKey: baseURLKey)
     return host
   }

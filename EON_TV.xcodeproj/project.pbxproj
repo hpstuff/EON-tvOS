@@ -32,6 +32,15 @@
 		7120B1282E98422A00DCA24F /* EON_TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EON_TV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000002 /* EON_TVUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EON_TVUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000000002 /* EON_TVTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EON_TVTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DD0000000000000000000001 /* App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = App.xcconfig; sourceTree = "<group>"; };
+		DD0000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		DD0000000000000000000100 /* vivacom.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = vivacom.xcconfig; sourceTree = "<group>"; };
+		DD0000000000000000000101 /* sbb.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = sbb.xcconfig; sourceTree = "<group>"; };
+		DD0000000000000000000102 /* telemach-ba.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = telemach-ba.xcconfig; sourceTree = "<group>"; };
+		DD0000000000000000000103 /* telemach-hr.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = telemach-hr.xcconfig; sourceTree = "<group>"; };
+		DD0000000000000000000104 /* telemach-si.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = telemach-si.xcconfig; sourceTree = "<group>"; };
+		DD0000000000000000000106 /* telemach-me.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = telemach-me.xcconfig; sourceTree = "<group>"; };
+		DD0000000000000000000105 /* nova.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = nova.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -82,6 +91,7 @@
 		7120B11F2E98422A00DCA24F = {
 			isa = PBXGroup;
 			children = (
+				DD0000000000000000000010 /* Config */,
 				7120B12A2E98422A00DCA24F /* EON_TV */,
 				AA0000000000000000000003 /* EON_TVUITests */,
 				BB0000000000000000000003 /* EON_TVTests */,
@@ -97,6 +107,30 @@
 				BB0000000000000000000002 /* EON_TVTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		DD0000000000000000000010 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				DD0000000000000000000001 /* App.xcconfig */,
+				DD0000000000000000000002 /* Info.plist */,
+				DD0000000000000000000011 /* Brands */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		DD0000000000000000000011 /* Brands */ = {
+			isa = PBXGroup;
+			children = (
+				DD0000000000000000000100 /* vivacom.xcconfig */,
+				DD0000000000000000000101 /* sbb.xcconfig */,
+				DD0000000000000000000102 /* telemach-ba.xcconfig */,
+				DD0000000000000000000106 /* telemach-me.xcconfig */,
+				DD0000000000000000000103 /* telemach-hr.xcconfig */,
+				DD0000000000000000000104 /* telemach-si.xcconfig */,
+				DD0000000000000000000105 /* nova.xcconfig */,
+			);
+			path = Brands;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -406,6 +440,7 @@
 		};
 		7120B1342E98422C00DCA24F /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = DD0000000000000000000001 /* App.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -415,6 +450,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "EON TV";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
@@ -443,6 +479,7 @@
 		};
 		7120B1352E98422C00DCA24F /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = DD0000000000000000000001 /* App.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -452,6 +489,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "EON TV";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
@@ -631,7 +669,7 @@
 			repositoryURL = "https://github.com/hpstuff/EONKit-Binary.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 2.0.0;
+				minimumVersion = 2.1.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

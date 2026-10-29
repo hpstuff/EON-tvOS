@@ -86,7 +86,10 @@ struct SignInView: View {
         .font(.headline.weight(.regular))
         .foregroundStyle(Theme.textPrimary)
 
-      modePicker
+      // Code sign-in needs a Smart TV client issued for this build's brand.
+      if BrandConfig.current.supportsCodeSignIn {
+        modePicker
+      }
 
       switch mode {
       case .password:

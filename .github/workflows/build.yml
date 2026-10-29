@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      brand:
+        description: Brand file in Config/Brands, without .xcconfig
+        default: vivacom
 
 jobs:
   build:
@@ -39,11 +43,14 @@ jobs:
 
       # pipefail so a failing xcodebuild fails the step instead of the formatter's exit code winning.
       - name: Build
+        env:
+          BRAND: ${{ inputs.brand || 'vivacom' }}
         run: |
           set -o pipefail
           xcodebuild build \
             -project EON_TV.xcodeproj \
             -scheme EON_TV \
             -destination 'generic/platform=tvOS Simulator' \
+            -xcconfig "Config/Brands/${BRAND}.xcconfig" \
             CODE_SIGNING_ALLOWED=NO \
             | xcbeautify

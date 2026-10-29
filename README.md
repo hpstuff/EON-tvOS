@@ -80,6 +80,45 @@ can be read out of it. Keeping it out of the repository is hygiene, not protecti
 particular values belong to EON's published clients, not to you, and they unlock nothing on
 their own — playback still needs your own account and subscription.
 
+## Choosing the country
+
+Each build talks to one EON brand, chosen at build time; the app has no country picker. The
+brand files live in `Config/Brands`, and `Config/App.xcconfig` (the target's base
+configuration) defaults to Vivacom. Each file sets three values, which reach the app through
+`Config/Info.plist`:
+
+| Setting | Meaning |
+| --- | --- |
+| `EON_BRAND` | Identifier from the broker's `v2/brands`. The SDK resolves it to the brand's CDN, or to the shared default CDN when it has none of its own |
+| `EON_LANGUAGE` | Language for category names when the Apple TV is set to it; English otherwise |
+| `EON_CODE_SIGN_IN` | `YES` to offer code sign-in. It needs a Smart TV client issued for the brand, and only Vivacom's is known, so the other brands offer password sign-in only |
+
+| File | Brand | CDN |
+| --- | --- | --- |
+| `vivacom.xcconfig` | Vivacom, Bulgaria | `vivacom` |
+| `sbb.xcconfig` | SBB, Serbia (listed by the broker as `sbb-qa`) | `ug` (shared) |
+| `telemach-ba.xcconfig` | Telemach, Bosnia and Herzegovina | `ug` (shared) |
+| `telemach-me.xcconfig` | Telemach, Montenegro | `ug` (shared) |
+| `telemach-hr.xcconfig` | Telemach, Croatia | `ug` (shared) |
+| `telemach-si.xcconfig` | Telemach, Slovenia | `ug` (shared) |
+| `nova.xcconfig` | Nova, Greece | `forthnet` |
+
+**From the command line**, pass the brand's file:
+
+```
+xcodebuild build -project EON_TV.xcodeproj -scheme EON_TV -xcconfig Config/Brands/sbb.xcconfig …
+```
+
+**In Xcode**, create the gitignored `Config/Brand.local.xcconfig` with a single
+`#include "Brands/sbb.xcconfig"` line. **In CI**, run the Build workflow by hand and give it
+the brand file's name.
+
+A session belongs to the brand that issued it. When a build for another brand is installed
+over an existing one, the app starts signed out.
+
+Only Vivacom has been tested with a subscriber account. The other brands resolve to their CDN
+and reach the sign-in screen, but sign-in, the guide and playback there are unverified.
+
 ## Running
 
 1. Open `EON_TV.xcodeproj` and run the `EON_TV` scheme on an Apple TV simulator or device.

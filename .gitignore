@@ -6,3 +6,6 @@ xcuserdata/
 
 # Local credentials, supplied per checkout (see Secrets.example.swift)
 EON_TV/App/Secrets.swift
+
+# Local brand override for Xcode builds (see Config/App.xcconfig)
+Config/Brand.local.xcconfig

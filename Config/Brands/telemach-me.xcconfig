@@ -1,0 +1,8 @@
+// Telemach, Montenegro
+
+// Identifier from the broker's v2/brands.
+EON_BRAND = telemach-me
+// Language the platform names categories in when the Apple TV is set to it (otherwise English).
+EON_LANGUAGE = sr
+// Code sign-in needs a Smart TV client issued for this brand; only Vivacom's is known.
+EON_CODE_SIGN_IN = NO
