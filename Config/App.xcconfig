@@ -1,0 +1,14 @@
+//
+//  App.xcconfig
+//  EON TV
+//
+//  Base configuration of the EON_TV target. It picks the EON brand this build talks to.
+//  Vivacom is the default; build another brand with
+//
+//    xcodebuild … -xcconfig Config/Brands/<brand>.xcconfig
+//
+//  or, in Xcode, with a gitignored Config/Brand.local.xcconfig that includes one of them.
+//
+
+#include "Brands/vivacom.xcconfig"
+#include? "Brand.local.xcconfig"

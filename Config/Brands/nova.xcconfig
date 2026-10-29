@@ -1,0 +1,8 @@
+// Nova, Greece
+
+// Identifier from the broker's v2/brands.
+EON_BRAND = nova
+// Language the platform names categories in when the Apple TV is set to it (otherwise English).
+EON_LANGUAGE = el
+// Code sign-in needs a Smart TV client issued for this brand; only Vivacom's is known.
+EON_CODE_SIGN_IN = NO
