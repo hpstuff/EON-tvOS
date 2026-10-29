@@ -44,6 +44,7 @@ struct PlayerScreenContent: View {
   @Environment(ContentStore.self) private var store
   @Environment(WatchHistory.self) private var history
   @Environment(FavoritesStore.self) private var favorites
+  @Environment(ParentalGate.self) private var gate
   @Environment(LiveClock.self) private var clock
   @Environment(PlaybackCoordinator.self) private var coordinator
   /// The round buttons grow with the viewer's text size, so the glyph never outgrows its circle.
@@ -108,7 +109,9 @@ struct PlayerScreenContent: View {
 
         loadingOverlay(controller)
 
-        if controller.hasFailed {
+        if controller.needsPin {
+          pinView(controller)
+        } else if controller.hasFailed {
           if case .failed(let message) = controller.phase {
             failureView(controller, message: message)
           }
@@ -160,6 +163,7 @@ struct PlayerScreenContent: View {
       store: store,
       history: history,
       favorites: favorites,
+      gate: gate,
       clock: clock
     )
     controller = created
@@ -581,12 +585,43 @@ struct PlayerScreenContent: View {
     .onAppear { focus = .failureRetry }
   }
 
+  /// The household PIN over the channel's artwork; nothing of the channel streams until it's right.
+  private func pinView(_ controller: PlayerController) -> some View {
+    ZStack {
+      Color.black.ignoresSafeArea()
+      VStack(spacing: 24) {
+        ChannelLogo(channel: controller.channel, height: 72, platter: false)
+        PinEntryView(
+          title: "\(controller.channel.name) is for adults",
+          message: "Enter the 4-digit PIN set for your EON account to watch.",
+          submit: { await controller.unlock(with: $0) },
+          onSuccess: { panel = .none; focus = .surface },
+          onCancel: cancelUnlock
+        )
+      }
+    }
+    .transition(.opacity)
+  }
+
+  private func cancelUnlock() {
+    guard let controller, controller.cancelUnlock() else {
+      close()
+      return
+    }
+    panel = .none
+    focus = .surface
+  }
+
   // MARK: Behaviour
 
   /// Back works the same wherever focus happens to be: close a panel, cancel a pending skip,
   /// hide the controls, and only then leave the player.
   private func handleExit() {
     AppLog.player.notice("exit pressed controls=\(controlsVisible) panel=\(String(describing: panel), privacy: .public) preview=\(previewMs ?? -1) focus=\(String(describing: focus), privacy: .public)")
+    if controller?.needsPin == true {
+      cancelUnlock()
+      return
+    }
     guard let controller, !controller.hasFailed else {
       close()
       return
@@ -613,7 +648,7 @@ struct PlayerScreenContent: View {
   private func reseatFocus() {
     Task {
       try? await Task.sleep(for: .milliseconds(150))
-      guard focus == nil, let controller, !controller.hasFailed else { return }
+      guard focus == nil, let controller, !controller.hasFailed, !controller.needsPin else { return }
       switch panel {
       case .none:
         focus = controlsVisible ? .timeline : .surface
@@ -624,7 +659,7 @@ struct PlayerScreenContent: View {
   }
 
   private func handlePlayPause() {
-    guard let controller, !controller.hasFailed, panel == .none || panel.isPopover else { return }
+    guard let controller, !controller.hasFailed, !controller.needsPin, panel == .none || panel.isPopover else { return }
     if previewMs != nil {
       commitPreview(controller)
     } else {

@@ -100,7 +100,7 @@ struct HomeView: View {
         }
         .equatable()
 
-        let favs = favorites.channels(in: store)
+        let favs = favorites.channels(in: store).filter { !$0.requiresParentalPin }
         if !favs.isEmpty {
           Shelf(title: "Favorites", items: favs) { channel in
             channelCard(channel, shelf: "favorites")
@@ -122,7 +122,7 @@ struct HomeView: View {
           .equatable()
         }
 
-        ForEach(store.browsableCategories) { category in
+        ForEach(homeCategories) { category in
           Shelf(title: category.name, items: category.channels) { channel in
             channelCard(channel, shelf: "category-\(category.id)")
           }
@@ -223,7 +223,7 @@ struct HomeView: View {
   private var resumeItems: [ResumeItem] {
     let now = clock.nowMs
     return history.resumes.compactMap { entry in
-      guard let channel = store.channel(entry.channelID), channel.canCatchUp else { return nil }
+      guard let channel = store.channel(entry.channelID), channel.canCatchUp, !channel.requiresParentalPin else { return nil }
       let schedule = store.schedule(withID: entry.scheduleID, channelID: entry.channelID)
         ?? Schedule(
           id: entry.scheduleID, title: entry.title, originalTitle: nil, shortDescription: nil,
@@ -238,7 +238,18 @@ struct HomeView: View {
   }
 
   private var recentChannels: [Channel] {
-    history.recentChannelIDs.compactMap { store.channel($0) }
+    history.recentChannelIDs.compactMap { store.channel($0) }.filter { !$0.requiresParentalPin }
+  }
+
+  /// Home leaves adult channels out, so their artwork never greets the household; they stay
+  /// in Channels, the Guide and Search behind the PIN.
+  private var homeCategories: [ChannelCategory] {
+    store.browsableCategories.compactMap { category in
+      let kept = category.channels.filter { !$0.requiresParentalPin }
+      guard !kept.isEmpty else { return nil }
+      guard kept.count != category.channels.count else { return category }
+      return ChannelCategory(id: category.id, name: category.name, defaultList: category.defaultList, order: category.order, channels: kept)
+    }
   }
 
   // MARK: Hero
@@ -250,8 +261,8 @@ struct HomeView: View {
   }
 
   private func seedFeatured() {
-    guard featured == nil, let first = store.channels.first else { return }
-    let channel = history.lastChannelID.flatMap { store.channel($0) } ?? first
+    guard featured == nil, let first = store.channels.first(where: { !$0.requiresParentalPin }) else { return }
+    let channel = history.lastChannelID.flatMap { store.channel($0) }.flatMap { $0.requiresParentalPin ? nil : $0 } ?? first
     featured = Featured(channel: channel, schedule: nil, resumeMs: nil)
   }
 

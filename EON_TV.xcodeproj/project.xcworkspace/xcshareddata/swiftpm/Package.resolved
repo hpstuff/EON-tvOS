@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/hpstuff/EONKit-Binary.git",
       "state" : {
-        "revision" : "69d028e8c32ab8908e4aa7352a1e05c0a3fa1c74",
-        "version" : "1.0.2"
+        "revision" : "cca5793b013d22b5a9d24d086ce2c38f509351e7",
+        "version" : "2.0.0"
       }
     }
   ],

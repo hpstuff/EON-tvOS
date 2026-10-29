@@ -4,19 +4,12 @@ import EONKit
 // App-level conveniences over the SDK's `Channel`. These never change the SDK's
 // behaviour; they only add crash-safe accessors and capability checks the UI needs.
 extension Channel {
-  /// Artwork host, mirroring the SDK's URL scheme for channel and programme images.
-  static func imageHost(baseURL: String) -> String {
-    "https://images-\(Constants.platform == "android" ? "android-tv" : "web").\(baseURL)"
-  }
+  /// The 16:9 logo, sharp at the sizes the app draws it (up to the player's 90pt).
+  var logoURL: URL? { logoURL(.wide16x9, minHeight: 144) }
 
-  /// A logo URL that can never crash. Uses the SDK's XL rendition when present and
-  /// falls back to the largest available image otherwise.
-  var logoURL: URL? {
-    guard let baseURL else { return nil }
-    if images.contains(where: { $0.size == "XL" }) { return URL(string: logo) }
-    guard let largest = images.max(by: { $0.width * $0.height < $1.width * $1.height }) else { return nil }
-    return URL(string: Channel.imageHost(baseURL: baseURL) + largest.path)
-  }
+  /// The 3:1 logo, which fills a wide row such as the guide's channel column better; falls
+  /// back to the 16:9 logo for channels that have none.
+  var wideLogoURL: URL? { logoURL(.wide3x1, minHeight: 90) ?? logoURL }
 
   var primaryPublishingPoint: PublishingPoint? { publishingPoint.first }
 

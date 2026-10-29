@@ -6,7 +6,7 @@ final class ContentLogicTests: XCTestCase {
   private func makeChannel(id: Int = 1, cutv: Bool = true, cutvDelay: Int = 7, startOver: Bool = true) -> Channel {
     Channel(
       id: id, name: "Test", shortName: "T",
-      images: [ChannelImage(path: "/logo", width: 480, height: 270, size: "XL", type: "LOGO")],
+      logos: ["LOGO_16_9_DARK": [ImageRendition(path: "/logo", height: 270)]],
       baseURL: "example.test",
       publishingPoint: [PublishingPoint(publishingPoint: "pp", audioLanguage: "eng", subtitleLanguage: "eng", profileIds: [1], playerCfgs: [PlayerConfig(id: 1, type: "live", sig: "a"), PlayerConfig(id: 2, type: "cutv", sig: "b")])],
       subscribed: true, drmRequired: false, castEnabled: true, liveEnabled: true, cutvEnabled: cutv,
@@ -57,7 +57,8 @@ final class ContentLogicTests: XCTestCase {
     await store.loadInitial()
 
     XCTAssertFalse(store.channels.isEmpty)
-    XCTAssertEqual(store.shelves.onNow.count, store.channels.count)
+    XCTAssertTrue(store.channels.contains(where: \.requiresParentalPin), "the demo line-up has an adult channel")
+    XCTAssertEqual(store.shelves.onNow.count, store.channels.filter { !$0.requiresParentalPin }.count, "Home's shelves leave adult channels out")
     XCTAssertEqual(store.todayLoadedFraction, 1, accuracy: 0.001)
 
     let now = clock.nowMs
@@ -102,7 +103,7 @@ final class ContentLogicTests: XCTestCase {
     let history = WatchHistory()
     let controller = PlayerController(
       request: PlaybackRequest(channel: item.channel, mode: .catchUp(item.schedule, offsetMs: 0), lineup: store.channels),
-      backend: DemoBackend.make(), store: store, history: history, favorites: FavoritesStore(), clock: clock
+      backend: DemoBackend.make(), store: store, history: history, favorites: FavoritesStore(), gate: ParentalGate(), clock: clock
     )
     defer { controller.stop(); history.clear() }
 
@@ -126,15 +127,7 @@ final class ContentLogicTests: XCTestCase {
     XCTAssertEqual(controller.currentProgram?.id, store.nowPlaying(item.channel)?.id)
   }
 
-  func testFavoritesToggleAndHistoryResumeRules() {
-    let favorites = FavoritesStore()
-    let channel = makeChannel(id: 987_654)
-    let initiallyContained = favorites.contains(channel.id)
-    favorites.toggle(channel)
-    XCTAssertEqual(favorites.contains(channel.id), !initiallyContained)
-    favorites.toggle(channel)
-    XCTAssertEqual(favorites.contains(channel.id), initiallyContained)
-
+  func testHistoryResumeRules() {
     let history = WatchHistory()
     history.clear()
     let schedule = makeSchedule(id: 555, start: 0, end: 1_000_000)
@@ -145,5 +138,160 @@ final class ContentLogicTests: XCTestCase {
     history.recordChannel(1); history.recordChannel(2); history.recordChannel(1)
     XCTAssertEqual(history.recentChannelIDs, [1, 2])
     history.clear()
+  }
+
+  // MARK: Favourites, PIN and profiles
+
+  /// Polls until `condition` holds, for state that settles after a background save.
+  private func waitUntil(_ condition: () -> Bool, timeout: Duration = .seconds(2)) async {
+    let deadline = ContinuousClock.now + timeout
+    while !condition(), ContinuousClock.now < deadline {
+      try? await Task.sleep(for: .milliseconds(20))
+    }
+  }
+
+  func testFavoritesFollowThePlatformList() async throws {
+    let repository = DemoFavoritesRepository(profiles: DemoProfilesRepository())
+    let favorites = FavoritesStore()
+    await favorites.attach(repository)
+    XCTAssertEqual(favorites.ids, [103, 115])
+
+    favorites.toggle(makeChannel(id: 104))
+    XCTAssertTrue(favorites.contains(104), "a toggle shows at once")
+    try await Task.sleep(for: .milliseconds(500))
+    let saved = try await repository.getFavorites().channelIDs
+    XCTAssertEqual(saved, [103, 115, 104])
+
+    favorites.removeAll()
+    XCTAssertTrue(favorites.isEmpty)
+    try await Task.sleep(for: .milliseconds(500))
+    let cleared = try await repository.getFavorites().channelIDs
+    XCTAssertEqual(cleared, [])
+  }
+
+  func testFavoritesRollBackWhenTheSaveFails() async {
+    final class FailingFavorites: FavoritesRepository {
+      func getFavorites() async throws -> FavoriteList { FavoriteList(id: 1, name: "Favorites", channelIDs: [7]) }
+      func update(list: FavoriteList.ID, adding: [Int], removing: [Int]) async throws { throw URLError(.notConnectedToInternet) }
+    }
+    let favorites = FavoritesStore()
+    await favorites.attach(FailingFavorites())
+    favorites.toggle(makeChannel(id: 8))
+    XCTAssertTrue(favorites.contains(8))
+    await waitUntil { favorites.lastError != nil }
+    XCTAssertFalse(favorites.contains(8), "the platform refused, so the toggle is undone")
+    XCTAssertEqual(favorites.ids, [7])
+    XCTAssertNotNil(favorites.lastError)
+  }
+
+  func testParentalGateUnlocksWithTheHouseholdPin() async {
+    let gate = ParentalGate()
+    gate.attach(DemoParentalControlRepository())
+    let adult = Channel(
+      id: 5, name: "Adult", shortName: "A", logos: [:], publishingPoint: [],
+      subscribed: true, drmRequired: false, castEnabled: false, liveEnabled: true, cutvEnabled: false,
+      drEnabled: false, aaEnabled: false, startOverEnabled: false, cutvDelay: 0, ageRating: "18"
+    )
+    XCTAssertTrue(gate.needsPin(for: adult))
+    XCTAssertFalse(gate.needsPin(for: makeChannel()))
+
+    let wrong = await gate.unlock(with: "1234")
+    XCTAssertEqual(wrong, .wrongPin)
+    XCTAssertTrue(gate.needsPin(for: adult))
+
+    let right = await gate.unlock(with: DemoParentalControlRepository.pin)
+    XCTAssertEqual(right, .unlocked)
+    XCTAssertFalse(gate.needsPin(for: adult))
+
+    gate.lock()
+    XCTAssertTrue(gate.needsPin(for: adult))
+  }
+
+  /// Nothing of an adult channel is requested before the PIN, and cancelling the PIN after a
+  /// channel switch goes back to what was playing.
+  func testPlayerWaitsForThePinBeforeStreamingAnAdultChannel() async throws {
+    let clock = LiveClock()
+    let backend = DemoBackend.make()
+    let store = ContentStore(backend: backend, clock: clock)
+    await store.loadInitial()
+    let adult = try XCTUnwrap(store.channels.first(where: \.requiresParentalPin))
+    let regular = try XCTUnwrap(store.channels.first { !$0.requiresParentalPin })
+    let gate = ParentalGate()
+    gate.attach(backend.parental)
+    let history = WatchHistory()
+    history.use(profileID: -1)
+
+    let controller = PlayerController(
+      request: PlaybackRequest(channel: regular, mode: .live, lineup: store.channels),
+      backend: backend, store: store, history: history, favorites: FavoritesStore(), gate: gate, clock: clock
+    )
+    defer { controller.stop(); history.clear() }
+    controller.start()
+    XCTAssertTrue(controller.phase.isLoading)
+
+    controller.switchChannel(adult)
+    XCTAssertEqual(controller.phase, .needsPin)
+    XCTAssertEqual(controller.channel, adult)
+    XCTAssertNil(controller.player.currentItem, "the locked channel's stream is never requested")
+
+    XCTAssertTrue(controller.cancelUnlock())
+    XCTAssertEqual(controller.channel, regular)
+
+    controller.switchChannel(adult)
+    let wrong = await controller.unlock(with: "9999")
+    XCTAssertEqual(wrong, .wrongPin)
+    XCTAssertEqual(controller.phase, .needsPin)
+    let right = await controller.unlock(with: DemoParentalControlRepository.pin)
+    XCTAssertEqual(right, .unlocked)
+    XCTAssertTrue(controller.phase.isLoading)
+    XCTAssertFalse(controller.cancelUnlock(), "once unlocked there is nothing to cancel back to")
+  }
+
+  func testProfilesLimitTheLineUpToTheirMaturity() async throws {
+    let clock = LiveClock()
+    let backend = DemoBackend.make()
+    let profiles = try await backend.profiles.getProfiles()
+    let kids = try XCTUnwrap(profiles.first { $0.name == "Kids" })
+
+    let store = ContentStore(backend: backend, clock: clock, profile: kids)
+    await store.loadChannels()
+    XCTAssertFalse(store.channels.isEmpty)
+    XCTAssertTrue(store.channels.allSatisfy { kids.allows(ageRating: $0.ageRating) })
+    XCTAssertFalse(store.categories.contains { $0.name == "Movies" || $0.name == "Adult" }, "categories left empty disappear")
+
+    let family = ContentStore(backend: backend, clock: clock, profile: profiles.first { $0.isDefault })
+    await family.loadChannels()
+    XCTAssertGreaterThan(family.channels.count, store.channels.count)
+  }
+
+  func testHistoryIsKeptPerProfile() {
+    let history = WatchHistory()
+    history.use(profileID: -101)
+    history.clear()
+    history.recordChannel(42)
+    history.use(profileID: -102)
+    XCTAssertEqual(history.recentChannelIDs, [], "another profile starts with its own history")
+    history.recordChannel(7)
+    history.use(profileID: -101)
+    XCTAssertEqual(history.recentChannelIDs, [42])
+    history.clear()
+    history.use(profileID: -102)
+    history.clear()
+  }
+
+  func testProtectedProfilesNeedTheirPinToSwitch() async throws {
+    let repository = DemoProfilesRepository()
+    let store = ProfileStore()
+    try await store.load(from: repository)
+    let kids = try XCTUnwrap(store.profiles.first { $0.pinProtected })
+
+    do {
+      try await store.activate(kids, pin: "9999", using: repository)
+      XCTFail("a wrong PIN must not switch profile")
+    } catch AuthError.wrongPin {}
+    XCTAssertNotEqual(store.activeID, kids.id)
+
+    try await store.activate(kids, pin: DemoParentalControlRepository.pin, using: repository)
+    XCTAssertEqual(store.activeID, kids.id)
   }
 }

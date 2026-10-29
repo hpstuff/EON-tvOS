@@ -11,6 +11,8 @@ struct EONTVApp: App {
         .environment(session.clock)
         .environment(session.favorites)
         .environment(session.history)
+        .environment(session.profiles)
+        .environment(session.parentalGate)
         .preferredColorScheme(.dark)
         // Emphasis is white throughout, so prominent glass controls read as white platters.
         .tint(.white)

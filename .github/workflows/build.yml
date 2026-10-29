@@ -23,6 +23,8 @@ jobs:
           EON_ANDROIDTV_CLIENT_SECRET: ${{ secrets.EON_ANDROIDTV_CLIENT_SECRET }}
           EON_WEB_CLIENT_ID: ${{ secrets.EON_WEB_CLIENT_ID }}
           EON_WEB_CLIENT_SECRET: ${{ secrets.EON_WEB_CLIENT_SECRET }}
+          EON_SMARTTV_CLIENT_ID: ${{ secrets.EON_SMARTTV_CLIENT_ID }}
+          EON_SMARTTV_CLIENT_SECRET: ${{ secrets.EON_SMARTTV_CLIENT_SECRET }}
         run: |
           cat > EON_TV/App/Secrets.swift <<EOF
           enum Secrets {
@@ -30,6 +32,8 @@ jobs:
             static let androidTVClientSecret = "${EON_ANDROIDTV_CLIENT_SECRET}"
             static let webClientID = "${EON_WEB_CLIENT_ID}"
             static let webClientSecret = "${EON_WEB_CLIENT_SECRET}"
+            static let smartTVClientID = "${EON_SMARTTV_CLIENT_ID}"
+            static let smartTVClientSecret = "${EON_SMARTTV_CLIENT_SECRET}"
           }
           EOF
 

@@ -3,7 +3,7 @@ import EONKit
 import Observation
 
 /// What the viewer has been watching: recently tuned channels and catch-up positions.
-/// The platform has no history API, so this is kept on the device.
+/// The platform has no history API, so this is kept on the device, separately per profile.
 @Observable
 final class WatchHistory {
   struct ResumeEntry: Codable, Hashable, Identifiable {
@@ -26,21 +26,47 @@ final class WatchHistory {
   private static let maxChannels = 12
   private static let maxResumes = 20
 
-  private(set) var recentChannelIDs: [Int] {
-    didSet { UserDefaults.standard.set(recentChannelIDs, forKey: Self.channelsKey) }
+  private(set) var recentChannelIDs: [Int] = [] {
+    didSet { UserDefaults.standard.set(recentChannelIDs, forKey: channelsKey) }
   }
 
-  private(set) var resumes: [ResumeEntry] {
+  private(set) var resumes: [ResumeEntry] = [] {
     didSet {
       if let data = try? JSONEncoder().encode(resumes) {
-        UserDefaults.standard.set(data, forKey: Self.resumeKey)
+        UserDefaults.standard.set(data, forKey: resumeKey)
       }
     }
   }
 
+  private var channelsKey = WatchHistory.channelsKey
+  private var resumeKey = WatchHistory.resumeKey
+
   init() {
-    recentChannelIDs = UserDefaults.standard.array(forKey: Self.channelsKey) as? [Int] ?? []
-    if let data = UserDefaults.standard.data(forKey: Self.resumeKey),
+    load()
+  }
+
+  /// Switches to `profileID`'s history. History from before profiles were supported is
+  /// handed to the first profile that is used.
+  func use(profileID: Int?) {
+    let suffix = profileID.map { ".\($0)" } ?? ""
+    let channels = Self.channelsKey + suffix
+    let resume = Self.resumeKey + suffix
+    let defaults = UserDefaults.standard
+    if profileID != nil, defaults.object(forKey: channels) == nil, defaults.object(forKey: resume) == nil {
+      defaults.set(defaults.object(forKey: Self.channelsKey), forKey: channels)
+      defaults.set(defaults.object(forKey: Self.resumeKey), forKey: resume)
+      defaults.removeObject(forKey: Self.channelsKey)
+      defaults.removeObject(forKey: Self.resumeKey)
+    }
+    channelsKey = channels
+    resumeKey = resume
+    load()
+  }
+
+  private func load() {
+    let defaults = UserDefaults.standard
+    recentChannelIDs = defaults.array(forKey: channelsKey) as? [Int] ?? []
+    if let data = defaults.data(forKey: resumeKey),
        let decoded = try? JSONDecoder().decode([ResumeEntry].self, from: data) {
       resumes = decoded
     } else {

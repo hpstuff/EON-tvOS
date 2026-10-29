@@ -435,9 +435,13 @@ struct ChannelLogo: View {
   let channel: Channel
   var height: CGFloat = 44
   var platter = true
+  /// The 3:1 artwork is a tighter crop that fills a wide, short slot better.
+  var aspect: LogoAspect = .wide16x9
+
+  private var url: URL? { aspect == .wide3x1 ? channel.wideLogoURL : channel.logoURL }
 
   var body: some View {
-    RemoteImage(url: channel.logoURL, contentMode: .fit) {
+    RemoteImage(url: url, contentMode: .fit) {
       Text(channel.shortName)
         .font(.system(size: height * 0.42, weight: .semibold))
         .foregroundStyle(.white)
@@ -446,7 +450,7 @@ struct ChannelLogo: View {
         .padding(.horizontal, 6)
     }
     .frame(height: height)
-    .frame(minWidth: height * 1.2, maxWidth: height * 2.2)
+    .frame(minWidth: height * 1.2, maxWidth: height * (aspect == .wide3x1 ? 3.0 : 2.2))
     .padding(.horizontal, platter ? 10 : 0)
     .padding(.vertical, platter ? 6 : 0)
     .glassEffect(platter ? .regular : .identity, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

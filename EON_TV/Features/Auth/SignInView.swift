@@ -1,4 +1,5 @@
 import SwiftUI
+import EONKit
 
 /// Sign-in with either a password or a one-time code. The SDK registers this Apple TV with the
 /// platform on first use, hashes the username and exchanges credentials for tokens; this
@@ -172,7 +173,7 @@ struct SignInView: View {
 
   private var codeForm: some View {
     VStack(alignment: .leading, spacing: 22) {
-      Text("On your phone or computer, sign in to EON, open Devices and enter this code to link this Apple TV.")
+      Text(codeInstructions)
         .font(.caption.weight(.regular))
         .foregroundStyle(Theme.textSecondary)
         .fixedSize(horizontal: false, vertical: true)
@@ -188,7 +189,18 @@ struct SignInView: View {
         }
 
       case .waiting(let code, let expiresAt):
-        codePlate(code)
+        codePlate(code.otp)
+        if let link = code.verificationURLComplete {
+          HStack(spacing: 24) {
+            QRCodeView(url: link)
+              .frame(width: 176, height: 176)
+            Text("Or scan this with your phone's camera to open the page with the code already filled in.")
+              .font(.caption2.weight(.regular))
+              .foregroundStyle(Theme.textSecondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          .accessibilityElement(children: .combine)
+        }
         HStack(spacing: 14) {
           ProgressView().tint(Theme.textSecondary)
           Text("Waiting for you to confirm the code…")
@@ -222,6 +234,15 @@ struct SignInView: View {
     }
   }
 
+  /// Where to enter the code, named after the page the platform gave for it.
+  private var codeInstructions: String {
+    if case .waiting(let code, _) = session.codeSignIn, let url = code.verificationURL {
+      let page = (url.host() ?? "") + url.path()
+      return "On your phone or computer, go to \(page), sign in and enter this code to link this Apple TV."
+    }
+    return "On your phone or computer, sign in to your EON account and enter this code to link this Apple TV."
+  }
+
   /// The code in large, widely tracked type; a skeleton while there is none to show.
   private func codePlate(_ code: String?) -> some View {
     HStack {
@@ -236,7 +257,7 @@ struct SignInView: View {
           .accessibilityLabel("Code \(code.map(String.init).joined(separator: " "))")
       } else {
         SkeletonBlock()
-          .frame(width: codeSize * 5, height: codeSize)
+          .frame(width: codeSize * 6, height: codeSize)
       }
       Spacer()
     }

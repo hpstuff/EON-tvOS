@@ -575,7 +575,7 @@ private struct GuideChannelCellLabel: View {
         .font(.channelNumber)
         .foregroundStyle(isFocused ? Theme.textOnFocus.opacity(0.7) : Theme.textTertiary)
         .frame(width: 44 * metrics.scale, alignment: .trailing)
-      ChannelLogo(channel: channel, height: metrics.rowHeight * 0.48, platter: false)
+      ChannelLogo(channel: channel, height: metrics.rowHeight * 0.36, platter: false, aspect: .wide3x1)
         .frame(width: 96 * metrics.scale)
       Text(channel.shortName)
         .font(.caption2.weight(.semibold))
