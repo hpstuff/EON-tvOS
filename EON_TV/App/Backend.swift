@@ -186,7 +186,8 @@ enum ErrorPresenter {
       case (.decodingError, .signIn):
         return "We couldn't sign you in. Check your username and password."
       case (.decodingError, .session):
-        return "Your session has expired. Please sign in again."
+        // Only `AuthError.sessionExpired` means the session is gone; this is a bad answer.
+        return "EON TV sent an answer we couldn't read. Please try again."
       case (.notConfigured, _):
         return "The service configuration couldn't be loaded."
       case (.missingParams, .signIn):
