@@ -76,13 +76,15 @@ final class AppSession {
       do {
         let household = try await backend.auth.getHousehold()
         enter(household)
-      } catch let error as URLError {
-        phase = .unavailable(ErrorPresenter.message(for: error, context: .session))
-      } catch {
-        // The stored session is no longer valid (or the provider removed this device): drop
-        // it so the next sign-in registers the device afresh, and ask for credentials again.
+      } catch AuthError.sessionExpired, AuthError.deviceNotRegistered {
+        // The platform refused the session's refresh token, or the provider removed this
+        // device: drop the session so the next sign-in registers the device afresh.
         await backend.clearSession()
         phase = .signedOut
+      } catch {
+        // Anything else (offline, a server error, an unexpected answer) says nothing about
+        // the session itself. Keep it and let the viewer try again.
+        phase = .unavailable(ErrorPresenter.message(for: error, context: .session))
       }
     } catch {
       phase = .unavailable(ErrorPresenter.message(for: error, context: .session))
